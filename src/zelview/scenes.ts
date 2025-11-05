@@ -56,7 +56,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         instructionsDiv.style.marginBottom = '10px';
         instructionsDiv.style.fontSize = '11px';
         instructionsDiv.style.color = '#ccc';
-        instructionsDiv.textContent = 'Spawns a blue square where you\'re looking';
+        instructionsDiv.textContent = 'Spawns a white square where you\'re looking';
         billboardPanel.contents.appendChild(instructionsDiv);
 
         const spawnButton = document.createElement('button');
@@ -102,7 +102,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
                 console.log(`Target spawn position: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
                 console.log('Calling addBillboard...');
 
-                this.addBillboard(this.device, x, y, z, 150);
+                this.addBillboard(this.device, x, y, z, 150, 1.0, 1.0, 1.0, 1.0, false);
                 this.selectedBillboardIndex = this.billboardRenderers.length - 1;
 
                 console.log(`✓ Billboard spawned! New count: ${this.billboardRenderers.length}`);
@@ -145,6 +145,11 @@ class ZelviewRenderer implements Viewer.SceneGfx {
                 posYInput.value = billboard.position[1].toFixed(1);
                 posZInput.value = billboard.position[2].toFixed(1);
                 sizeInput.value = billboard.size.toFixed(0);
+                sizeValueLabel.textContent = billboard.size.toFixed(0);
+                colorRInput.value = billboard.color[0].toFixed(1);
+                colorGInput.value = billboard.color[1].toFixed(1);
+                colorBInput.value = billboard.color[2].toFixed(1);
+                renderBehindCheckbox.checked = billboard.renderBehindWalls;
             } else {
                 selectedDiv.textContent = 'No billboard selected';
                 controlsDiv.style.display = 'none';
@@ -225,6 +230,88 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         sizeValueLabel.style.marginBottom = '8px';
         sizeValueLabel.textContent = '150';
         controlsDiv.appendChild(sizeValueLabel);
+
+        // Color controls
+        const colorLabel = document.createElement('div');
+        colorLabel.textContent = 'Color (R, G, B):';
+        colorLabel.style.fontSize = '10px';
+        colorLabel.style.marginBottom = '3px';
+        controlsDiv.appendChild(colorLabel);
+
+        const colorContainer = document.createElement('div');
+        colorContainer.style.display = 'flex';
+        colorContainer.style.gap = '5px';
+        colorContainer.style.marginBottom = '8px';
+        controlsDiv.appendChild(colorContainer);
+
+        const colorRInput = document.createElement('input');
+        colorRInput.type = 'number';
+        colorRInput.min = '0';
+        colorRInput.max = '1';
+        colorRInput.step = '0.1';
+        colorRInput.value = '1.0';
+        colorRInput.style.width = '33%';
+        colorRInput.style.padding = '4px';
+        colorRInput.oninput = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].color[0] = parseFloat(colorRInput.value) || 0;
+            }
+        };
+        colorContainer.appendChild(colorRInput);
+
+        const colorGInput = document.createElement('input');
+        colorGInput.type = 'number';
+        colorGInput.min = '0';
+        colorGInput.max = '1';
+        colorGInput.step = '0.1';
+        colorGInput.value = '1.0';
+        colorGInput.style.width = '33%';
+        colorGInput.style.padding = '4px';
+        colorGInput.oninput = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].color[1] = parseFloat(colorGInput.value) || 0;
+            }
+        };
+        colorContainer.appendChild(colorGInput);
+
+        const colorBInput = document.createElement('input');
+        colorBInput.type = 'number';
+        colorBInput.min = '0';
+        colorBInput.max = '1';
+        colorBInput.step = '0.1';
+        colorBInput.value = '1.0';
+        colorBInput.style.width = '33%';
+        colorBInput.style.padding = '4px';
+        colorBInput.oninput = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].color[2] = parseFloat(colorBInput.value) || 0;
+            }
+        };
+        colorContainer.appendChild(colorBInput);
+
+        // Render Behind Walls checkbox
+        const renderBehindLabel = document.createElement('label');
+        renderBehindLabel.style.fontSize = '10px';
+        renderBehindLabel.style.display = 'flex';
+        renderBehindLabel.style.alignItems = 'center';
+        renderBehindLabel.style.marginBottom = '8px';
+        renderBehindLabel.style.cursor = 'pointer';
+        controlsDiv.appendChild(renderBehindLabel);
+
+        const renderBehindCheckbox = document.createElement('input');
+        renderBehindCheckbox.type = 'checkbox';
+        renderBehindCheckbox.checked = false;
+        renderBehindCheckbox.style.marginRight = '5px';
+        renderBehindCheckbox.onchange = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].renderBehindWalls = renderBehindCheckbox.checked;
+            }
+        };
+        renderBehindLabel.appendChild(renderBehindCheckbox);
+
+        const renderBehindText = document.createElement('span');
+        renderBehindText.textContent = 'Render behind walls (painting mode)';
+        renderBehindLabel.appendChild(renderBehindText);
 
         // Delete button
         const deleteButton = document.createElement('button');
@@ -308,8 +395,8 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             this.billboardRenderers[i].destroy(device);
     }
 
-    public addBillboard(device: GfxDevice, x: number, y: number, z: number, size: number = 100, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0): void {
-        const billboard = new BillboardRenderer(device, this.renderHelper.renderCache, x, y, z, size, r, g, b, a);
+    public addBillboard(device: GfxDevice, x: number, y: number, z: number, size: number = 100, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0, renderBehindWalls: boolean = false): void {
+        const billboard = new BillboardRenderer(device, this.renderHelper.renderCache, x, y, z, size, r, g, b, a, renderBehindWalls);
         this.billboardRenderers.push(billboard);
     }
 }
@@ -358,9 +445,6 @@ function createRendererFromZELVIEW0(device: GfxDevice, zelview: ZELVIEW0): Zelvi
 
     createRenderer(headers);
 
-    // Add a test billboard at the origin (you can change these coordinates)
-    renderer.addBillboard(device, 0, 100, 0, 150, 1.0, 1.0, 0.0, 1.0); // Yellow billboard
-
     return renderer;
 }
 
@@ -378,12 +462,13 @@ export class ZelviewSceneDesc implements Viewer.SceneDesc {
         // Expose renderer to browser console for testing
         (window as any).zelviewRenderer = renderer;
         (window as any).zelviewDevice = device;
-        (window as any).spawnBillboard = (x: number, y: number, z: number, size: number = 100, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0) => {
-            renderer.addBillboard(device, x, y, z, size, r, g, b, a);
+        (window as any).spawnBillboard = (x: number, y: number, z: number, size: number = 100, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0, renderBehindWalls: boolean = false) => {
+            renderer.addBillboard(device, x, y, z, size, r, g, b, a, renderBehindWalls);
         };
 
-        console.log('🎮 Zelda OoT Renderer loaded! Use spawnBillboard(x, y, z, size, r, g, b, a) to add billboards');
-        console.log('Example: spawnBillboard(0, 200, 0, 150, 1.0, 0.0, 0.0, 1.0) for red billboard');
+        console.log('🎮 Zelda OoT Renderer loaded! Use spawnBillboard(x, y, z, size, r, g, b, a, renderBehindWalls) to add billboards');
+        console.log('Example: spawnBillboard(0, 200, 0, 150, 1.0, 0.0, 0.0, 1.0, false) for red billboard');
+        console.log('Set renderBehindWalls=true for "painting" effect (only visible behind walls)');
 
         return renderer;
     }

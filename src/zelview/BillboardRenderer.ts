@@ -76,11 +76,13 @@ export class BillboardRenderer {
     public size = 100.0;
     public visible = true;
     public color = vec4.fromValues(1.0, 1.0, 1.0, 1.0);
+    public renderBehindWalls = false;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, x: number, y: number, z: number, size: number, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, x: number, y: number, z: number, size: number, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0, renderBehindWalls: boolean = false) {
         vec3.set(this.position, x, y, z);
         this.size = size;
         vec4.set(this.color, r, g, b, a);
+        this.renderBehindWalls = renderBehindWalls;
 
         // Create a simple quad (2 triangles)
         // Centered at origin, will be transformed to world position
@@ -124,7 +126,7 @@ export class BillboardRenderer {
         // Create shader program
         this.program = new BillboardProgram();
 
-        // Set up blending for transparency
+        // Set up blending for transparency (depth settings will be applied dynamically)
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.Add,
@@ -132,8 +134,6 @@ export class BillboardRenderer {
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
         this.megaStateFlags.cullMode = GfxCullMode.None;
-        this.megaStateFlags.depthWrite = true;
-        this.megaStateFlags.depthCompare = GfxCompareMode.LessEqual;
 
         // Create a simple test texture
         this.createTestTexture(device, cache);
@@ -190,6 +190,17 @@ export class BillboardRenderer {
 
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
+
+        // Configure depth testing based on renderBehindWalls flag
+        if (this.renderBehindWalls) {
+            // Inverted mode: only render when behind walls (for "painting" effect)
+            this.megaStateFlags.depthWrite = false;
+            this.megaStateFlags.depthCompare = GfxCompareMode.Greater;
+        } else {
+            // Normal mode: render in front of walls, occluded by geometry
+            this.megaStateFlags.depthWrite = true;
+            this.megaStateFlags.depthCompare = GfxCompareMode.LessEqual;
+        }
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
