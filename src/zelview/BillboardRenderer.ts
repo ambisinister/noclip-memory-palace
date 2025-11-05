@@ -1,0 +1,259 @@
+import * as Viewer from '../viewer.js';
+import { GfxDevice, GfxFormat, GfxTexture, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform.js";
+import { mat4, vec3, vec4 } from 'gl-matrix';
+import { DeviceProgram } from "../Program.js";
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { computeViewMatrix } from '../Camera.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
+
+// Simple shader program for billboards
+class BillboardProgram extends DeviceProgram {
+    public static ub_SceneParams = 0;
+
+    public override vert = `
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+    Mat4x4 u_ModelView;
+    vec4 u_Color;
+};
+
+layout(location = 0) in vec3 a_Position;
+layout(location = 1) in vec2 a_TexCoord;
+
+out vec2 v_TexCoord;
+
+void main() {
+    v_TexCoord = a_TexCoord;
+
+    // Simple transformation: ModelView * Position
+    vec4 viewPos = UnpackMatrix(u_ModelView) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * viewPos;
+}
+`;
+
+    public override frag = `
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+    Mat4x4 u_ModelView;
+    vec4 u_Color;
+};
+
+uniform sampler2D u_Texture;
+
+in vec2 v_TexCoord;
+
+void main() {
+    gl_FragColor = u_Color;
+}
+`;
+}
+
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 1, numSamplers: 1 },
+];
+
+export class BillboardRenderer {
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private inputLayout: GfxInputLayout;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
+    private program: BillboardProgram;
+    private gfxProgram: GfxProgram | null = null;
+    private textureMapping = new TextureMapping();
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+
+    public position = vec3.create();
+    public size = 100.0;
+    public visible = true;
+    public color = vec4.fromValues(1.0, 1.0, 1.0, 1.0);
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, x: number, y: number, z: number, size: number, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0) {
+        vec3.set(this.position, x, y, z);
+        this.size = size;
+        vec4.set(this.color, r, g, b, a);
+
+        // Create a simple quad (2 triangles)
+        // Centered at origin, will be transformed to world position
+        const halfSize = 0.5;
+        const vertexData = new Float32Array([
+            // Position (x, y, z)     UV (u, v)
+            -halfSize, -halfSize, 0,  0, 1,  // Bottom-left
+             halfSize, -halfSize, 0,  1, 1,  // Bottom-right
+             halfSize,  halfSize, 0,  1, 0,  // Top-right
+            -halfSize,  halfSize, 0,  0, 0,  // Top-left
+        ]);
+
+        // Two triangles forming a quad
+        const indexData = new Uint16Array([
+            0, 1, 2,  // First triangle
+            0, 2, 3,  // Second triangle
+        ]);
+
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
+
+        // Set up vertex format
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },  // Position
+            { location: 1, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 12 },  // TexCoord
+        ];
+
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 5 * 4, frequency: GfxVertexBufferFrequency.PerVertex },
+        ];
+
+        this.inputLayout = cache.createInputLayout({
+            indexBufferFormat: GfxFormat.U16_R,
+            vertexBufferDescriptors,
+            vertexAttributeDescriptors,
+        });
+
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
+
+        // Create shader program
+        this.program = new BillboardProgram();
+
+        // Set up blending for transparency
+        this.megaStateFlags = {};
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        });
+        this.megaStateFlags.cullMode = GfxCullMode.None;
+        this.megaStateFlags.depthWrite = true;
+        this.megaStateFlags.depthCompare = GfxCompareMode.LessEqual;
+
+        // Create a simple test texture
+        this.createTestTexture(device, cache);
+    }
+
+    private createTestTexture(device: GfxDevice, cache: GfxRenderCache): void {
+        // Create a simple 64x64 test texture (blue square)
+        const size = 64;
+        const pixels = new Uint8Array(size * size * 4);
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const idx = (y * size + x) * 4;
+
+                // Blue square with slight border
+                const border = 2;
+                if (x < border || x >= size - border || y < border || y >= size - border) {
+                    // White border
+                    pixels[idx + 0] = 255;  // R
+                    pixels[idx + 1] = 255;  // G
+                    pixels[idx + 2] = 255;  // B
+                    pixels[idx + 3] = 255;  // A
+                } else {
+                    // Blue interior
+                    pixels[idx + 0] = 50;   // R
+                    pixels[idx + 1] = 150;  // G
+                    pixels[idx + 2] = 255;  // B
+                    pixels[idx + 3] = 255;  // A
+                }
+            }
+        }
+
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, size, size, 1));
+        device.setResourceName(gfxTexture, 'Billboard Test Texture');
+        device.uploadTextureData(gfxTexture, 0, [pixels]);
+
+        const gfxSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0,
+            maxLOD: 0,
+        });
+
+        this.textureMapping.gfxTexture = gfxTexture;
+        this.textureMapping.gfxSampler = gfxSampler;
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
+        if (this.gfxProgram === null)
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
+
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setSamplerBindingsFromTextureMappings([this.textureMapping]);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.setBindingLayouts(bindingLayouts);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
+        renderInst.setDrawCount(6, 0);
+
+        // Compute combined ModelView matrix (View * Billboard)
+        const viewMatrix = mat4.create();
+        computeViewMatrix(viewMatrix, viewerInput.camera);
+
+        const billboardMatrix = this.computeBillboardMatrix(viewMatrix);
+
+        const modelViewMatrix = mat4.create();
+        mat4.multiply(modelViewMatrix, viewMatrix, billboardMatrix);
+
+        // Upload scene params (projection + modelview + color)
+        let offs = renderInst.allocateUniformBuffer(BillboardProgram.ub_SceneParams, 16 + 16 + 4);
+        const sceneParamsF32 = renderInst.mapUniformBufferF32(BillboardProgram.ub_SceneParams);
+        offs += fillMatrix4x4(sceneParamsF32, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x4(sceneParamsF32, offs, modelViewMatrix);
+        offs += fillVec4(sceneParamsF32, offs, this.color[0], this.color[1], this.color[2], this.color[3]);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    private computeBillboardMatrix(viewMatrix: mat4): mat4 {
+        const billboardMatrix = mat4.create();
+
+        // Extract rotation part from view matrix and transpose it
+        // This makes the billboard face the camera
+        billboardMatrix[0] = viewMatrix[0];
+        billboardMatrix[1] = viewMatrix[4];
+        billboardMatrix[2] = viewMatrix[8];
+        billboardMatrix[3] = 0;
+
+        billboardMatrix[4] = viewMatrix[1];
+        billboardMatrix[5] = viewMatrix[5];
+        billboardMatrix[6] = viewMatrix[9];
+        billboardMatrix[7] = 0;
+
+        billboardMatrix[8] = viewMatrix[2];
+        billboardMatrix[9] = viewMatrix[6];
+        billboardMatrix[10] = viewMatrix[10];
+        billboardMatrix[11] = 0;
+
+        // Scale by billboard size
+        mat4.scale(billboardMatrix, billboardMatrix, [this.size, this.size, this.size]);
+
+        // Set position
+        billboardMatrix[12] = this.position[0];
+        billboardMatrix[13] = this.position[1];
+        billboardMatrix[14] = this.position[2];
+        billboardMatrix[15] = 1;
+
+        return billboardMatrix;
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.indexBuffer);
+        if (this.textureMapping.gfxTexture !== null)
+            device.destroyTexture(this.textureMapping.gfxTexture);
+    }
+}

@@ -12,6 +12,7 @@ import { CameraController } from '../Camera.js';
 import * as UI from '../ui.js';
 import { GfxrAttachmentClearDescriptor, GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { BillboardRenderer } from './BillboardRenderer.js';
 
 const pathBase = `ZeldaOcarinaOfTime`;
 
@@ -20,11 +21,16 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
     public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
+    public billboardRenderers: BillboardRenderer[] = [];
+    public selectedBillboardIndex: number = -1;
 
     public renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
+    private device: GfxDevice;
+    private currentCamera: Viewer.ViewerRenderInput | null = null;
 
     constructor(device: GfxDevice, private zelview: ZELVIEW0) {
+        this.device = device;
         this.renderHelper = new GfxRenderHelper(device);
         this.clearAttachmentDescriptor = makeAttachmentClearDescriptor(OpaqueBlack);
     }
@@ -41,7 +47,208 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
 
-        return [renderHacksPanel];
+        // Billboard spawn panel
+        const billboardPanel = new UI.Panel();
+        billboardPanel.customHeaderBackgroundColor = UI.HIGHLIGHT_COLOR;
+        billboardPanel.setTitle(UI.LAYER_ICON, 'Billboard Controls');
+
+        const instructionsDiv = document.createElement('div');
+        instructionsDiv.style.marginBottom = '10px';
+        instructionsDiv.style.fontSize = '11px';
+        instructionsDiv.style.color = '#ccc';
+        instructionsDiv.textContent = 'Spawns a blue square where you\'re looking';
+        billboardPanel.contents.appendChild(instructionsDiv);
+
+        const spawnButton = document.createElement('button');
+        spawnButton.textContent = '+ Spawn Billboard Here';
+        spawnButton.style.width = '100%';
+        spawnButton.style.padding = '10px';
+        spawnButton.style.marginBottom = '10px';
+        spawnButton.style.cursor = 'pointer';
+        spawnButton.style.backgroundColor = '#4a9eff';
+        spawnButton.style.border = 'none';
+        spawnButton.style.color = 'white';
+        spawnButton.style.fontWeight = 'bold';
+        spawnButton.onclick = () => {
+            console.log('=== SPAWN BUTTON CLICKED ===');
+            console.log('Current camera:', this.currentCamera ? 'EXISTS' : 'NULL');
+            console.log('Current billboard count:', this.billboardRenderers.length);
+
+            if (this.currentCamera) {
+                // Get camera position and forward direction
+                const viewMatrix = this.currentCamera.camera.viewMatrix;
+                console.log('View matrix:', viewMatrix);
+
+                // Camera position from view matrix (inverted)
+                const camX = -(viewMatrix[0] * viewMatrix[12] + viewMatrix[1] * viewMatrix[13] + viewMatrix[2] * viewMatrix[14]);
+                const camY = -(viewMatrix[4] * viewMatrix[12] + viewMatrix[5] * viewMatrix[13] + viewMatrix[6] * viewMatrix[14]);
+                const camZ = -(viewMatrix[8] * viewMatrix[12] + viewMatrix[9] * viewMatrix[13] + viewMatrix[10] * viewMatrix[14]);
+
+                console.log(`Camera position: (${camX.toFixed(1)}, ${camY.toFixed(1)}, ${camZ.toFixed(1)})`);
+
+                // Forward direction (negative Z in view space, transformed to world space)
+                const forwardX = -viewMatrix[2];
+                const forwardY = -viewMatrix[6];
+                const forwardZ = -viewMatrix[10];
+
+                console.log(`Camera forward: (${forwardX.toFixed(3)}, ${forwardY.toFixed(3)}, ${forwardZ.toFixed(3)})`);
+
+                // Spawn 300 units in front of camera
+                const distance = 300;
+                const x = camX + forwardX * distance;
+                const y = camY + forwardY * distance;
+                const z = camZ + forwardZ * distance;
+
+                console.log(`Target spawn position: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
+                console.log('Calling addBillboard...');
+
+                this.addBillboard(this.device, x, y, z, 150);
+                this.selectedBillboardIndex = this.billboardRenderers.length - 1;
+
+                console.log(`✓ Billboard spawned! New count: ${this.billboardRenderers.length}`);
+                console.log(`Selected index: ${this.selectedBillboardIndex}`);
+                updateControls();
+            } else {
+                console.warn('⚠ Camera not ready, try again');
+            }
+            console.log('=== SPAWN BUTTON END ===\n');
+        };
+        billboardPanel.contents.appendChild(spawnButton);
+
+        const countDiv = document.createElement('div');
+        countDiv.style.fontSize = '11px';
+        countDiv.style.color = '#aaa';
+        countDiv.style.marginBottom = '10px';
+        countDiv.textContent = `Total billboards: ${this.billboardRenderers.length}`;
+        billboardPanel.contents.appendChild(countDiv);
+
+        // Selected billboard controls
+        const selectedDiv = document.createElement('div');
+        selectedDiv.style.fontSize = '11px';
+        selectedDiv.style.color = '#ffa';
+        selectedDiv.style.marginBottom = '10px';
+        selectedDiv.style.fontWeight = 'bold';
+        billboardPanel.contents.appendChild(selectedDiv);
+
+        const controlsDiv = document.createElement('div');
+        controlsDiv.style.display = 'none';
+        billboardPanel.contents.appendChild(controlsDiv);
+
+        const updateControls = () => {
+            countDiv.textContent = `Total billboards: ${this.billboardRenderers.length}`;
+
+            if (this.selectedBillboardIndex >= 0 && this.selectedBillboardIndex < this.billboardRenderers.length) {
+                const billboard = this.billboardRenderers[this.selectedBillboardIndex];
+                selectedDiv.textContent = `Selected: Billboard #${this.selectedBillboardIndex + 1}`;
+                controlsDiv.style.display = 'block';
+                posXInput.value = billboard.position[0].toFixed(1);
+                posYInput.value = billboard.position[1].toFixed(1);
+                posZInput.value = billboard.position[2].toFixed(1);
+                sizeInput.value = billboard.size.toFixed(0);
+            } else {
+                selectedDiv.textContent = 'No billboard selected';
+                controlsDiv.style.display = 'none';
+            }
+        };
+
+        // Position controls
+        const posLabel = document.createElement('div');
+        posLabel.textContent = 'Position (X, Y, Z):';
+        posLabel.style.fontSize = '10px';
+        posLabel.style.marginTop = '5px';
+        posLabel.style.marginBottom = '3px';
+        controlsDiv.appendChild(posLabel);
+
+        const posContainer = document.createElement('div');
+        posContainer.style.display = 'flex';
+        posContainer.style.gap = '5px';
+        posContainer.style.marginBottom = '8px';
+        controlsDiv.appendChild(posContainer);
+
+        const posXInput = document.createElement('input');
+        posXInput.type = 'number';
+        posXInput.style.width = '33%';
+        posXInput.style.padding = '4px';
+        posXInput.oninput = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].position[0] = parseFloat(posXInput.value) || 0;
+            }
+        };
+        posContainer.appendChild(posXInput);
+
+        const posYInput = document.createElement('input');
+        posYInput.type = 'number';
+        posYInput.style.width = '33%';
+        posYInput.style.padding = '4px';
+        posYInput.oninput = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].position[1] = parseFloat(posYInput.value) || 0;
+            }
+        };
+        posContainer.appendChild(posYInput);
+
+        const posZInput = document.createElement('input');
+        posZInput.type = 'number';
+        posZInput.style.width = '33%';
+        posZInput.style.padding = '4px';
+        posZInput.oninput = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].position[2] = parseFloat(posZInput.value) || 0;
+            }
+        };
+        posContainer.appendChild(posZInput);
+
+        // Size control
+        const sizeLabel = document.createElement('div');
+        sizeLabel.textContent = 'Size:';
+        sizeLabel.style.fontSize = '10px';
+        sizeLabel.style.marginBottom = '3px';
+        controlsDiv.appendChild(sizeLabel);
+
+        const sizeInput = document.createElement('input');
+        sizeInput.type = 'range';
+        sizeInput.min = '10';
+        sizeInput.max = '500';
+        sizeInput.value = '150';
+        sizeInput.style.width = '100%';
+        sizeInput.oninput = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].size = parseFloat(sizeInput.value);
+                sizeValueLabel.textContent = sizeInput.value;
+            }
+        };
+        controlsDiv.appendChild(sizeInput);
+
+        const sizeValueLabel = document.createElement('div');
+        sizeValueLabel.style.fontSize = '10px';
+        sizeValueLabel.style.color = '#aaa';
+        sizeValueLabel.style.marginBottom = '8px';
+        sizeValueLabel.textContent = '150';
+        controlsDiv.appendChild(sizeValueLabel);
+
+        // Delete button
+        const deleteButton = document.createElement('button');
+        deleteButton.textContent = 'Delete Billboard';
+        deleteButton.style.width = '100%';
+        deleteButton.style.padding = '6px';
+        deleteButton.style.cursor = 'pointer';
+        deleteButton.style.backgroundColor = '#ff4444';
+        deleteButton.style.border = 'none';
+        deleteButton.style.color = 'white';
+        deleteButton.onclick = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].destroy(this.device);
+                this.billboardRenderers.splice(this.selectedBillboardIndex, 1);
+                this.selectedBillboardIndex = -1;
+                console.log('Billboard deleted');
+                updateControls();
+            }
+        };
+        controlsDiv.appendChild(deleteButton);
+
+        updateControls();
+
+        return [renderHacksPanel, billboardPanel];
     }
 
     public adjustCameraController(c: CameraController) {
@@ -49,11 +256,18 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        // Store camera reference for UI
+        this.currentCamera = viewerInput;
+
         this.renderHelper.pushTemplateRenderInst();
 
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.meshRenderers.length; i++)
             this.meshRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+
+        // Render billboards after world geometry
+        for (let i = 0; i < this.billboardRenderers.length; i++)
+            this.billboardRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
@@ -90,6 +304,13 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             this.meshDatas[i].destroy(device);
         for (let i = 0; i < this.meshRenderers.length; i++)
             this.meshRenderers[i].destroy(device);
+        for (let i = 0; i < this.billboardRenderers.length; i++)
+            this.billboardRenderers[i].destroy(device);
+    }
+
+    public addBillboard(device: GfxDevice, x: number, y: number, z: number, size: number = 100, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0): void {
+        const billboard = new BillboardRenderer(device, this.renderHelper.renderCache, x, y, z, size, r, g, b, a);
+        this.billboardRenderers.push(billboard);
     }
 }
 
@@ -137,6 +358,9 @@ function createRendererFromZELVIEW0(device: GfxDevice, zelview: ZELVIEW0): Zelvi
 
     createRenderer(headers);
 
+    // Add a test billboard at the origin (you can change these coordinates)
+    renderer.addBillboard(device, 0, 100, 0, 150, 1.0, 1.0, 0.0, 1.0); // Yellow billboard
+
     return renderer;
 }
 
@@ -149,7 +373,19 @@ export class ZelviewSceneDesc implements Viewer.SceneDesc {
         const zelviewData = await dataFetcher.fetchData(`${this.base}/${this.id}.zelview0`);
 
         const zelview0 = readZELVIEW0(zelviewData);
-        return createRendererFromZELVIEW0(device, zelview0);
+        const renderer = createRendererFromZELVIEW0(device, zelview0);
+
+        // Expose renderer to browser console for testing
+        (window as any).zelviewRenderer = renderer;
+        (window as any).zelviewDevice = device;
+        (window as any).spawnBillboard = (x: number, y: number, z: number, size: number = 100, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0) => {
+            renderer.addBillboard(device, x, y, z, size, r, g, b, a);
+        };
+
+        console.log('🎮 Zelda OoT Renderer loaded! Use spawnBillboard(x, y, z, size, r, g, b, a) to add billboards');
+        console.log('Example: spawnBillboard(0, 200, 0, 150, 1.0, 0.0, 0.0, 1.0) for red billboard');
+
+        return renderer;
     }
 }
 
