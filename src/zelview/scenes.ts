@@ -289,6 +289,27 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         };
         colorContainer.appendChild(colorBInput);
 
+        // Image file upload
+        const imageFileLabel = document.createElement('div');
+        imageFileLabel.textContent = 'Upload Image (optional):';
+        imageFileLabel.style.fontSize = '10px';
+        imageFileLabel.style.marginBottom = '3px';
+        controlsDiv.appendChild(imageFileLabel);
+
+        const imageFileInput = document.createElement('input');
+        imageFileInput.type = 'file';
+        imageFileInput.accept = 'image/*';
+        imageFileInput.style.width = '100%';
+        imageFileInput.style.padding = '4px';
+        imageFileInput.style.marginBottom = '5px';
+        imageFileInput.style.fontSize = '10px';
+        imageFileInput.onchange = () => {
+            if (this.selectedBillboardIndex >= 0 && imageFileInput.files && imageFileInput.files[0]) {
+                this.billboardRenderers[this.selectedBillboardIndex].loadImageFromFile(imageFileInput.files[0]);
+            }
+        };
+        controlsDiv.appendChild(imageFileInput);
+
         // Render Behind Walls checkbox
         const renderBehindLabel = document.createElement('label');
         renderBehindLabel.style.fontSize = '10px';
@@ -310,7 +331,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         renderBehindLabel.appendChild(renderBehindCheckbox);
 
         const renderBehindText = document.createElement('span');
-        renderBehindText.textContent = 'Render behind walls (painting mode)';
+        renderBehindText.textContent = 'Painting mode (only visible behind walls)';
         renderBehindLabel.appendChild(renderBehindText);
 
         // Delete button
@@ -468,7 +489,7 @@ export class ZelviewSceneDesc implements Viewer.SceneDesc {
 
         console.log('🎮 Zelda OoT Renderer loaded! Use spawnBillboard(x, y, z, size, r, g, b, a, renderBehindWalls) to add billboards');
         console.log('Example: spawnBillboard(0, 200, 0, 150, 1.0, 0.0, 0.0, 1.0, false) for red billboard');
-        console.log('Set renderBehindWalls=true for "painting" effect (only visible behind walls)');
+        console.log('Use the UI to upload images to billboards after spawning');
 
         return renderer;
     }

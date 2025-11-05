@@ -22,6 +22,7 @@ layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x4 u_ModelView;
     vec4 u_Color;
+    vec4 u_Params;
 };
 
 layout(location = 0) in vec3 a_Position;
@@ -45,6 +46,7 @@ layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x4 u_ModelView;
     vec4 u_Color;
+    vec4 u_Params; // x: useTexture flag
 };
 
 uniform sampler2D u_Texture;
@@ -52,7 +54,14 @@ uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
 void main() {
-    gl_FragColor = u_Color;
+    if (u_Params.x > 0.5) {
+        // Use texture
+        vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+        gl_FragColor = texColor * u_Color;
+    } else {
+        // Use solid color
+        gl_FragColor = u_Color;
+    }
 }
 `;
 }
@@ -77,8 +86,13 @@ export class BillboardRenderer {
     public visible = true;
     public color = vec4.fromValues(1.0, 1.0, 1.0, 1.0);
     public renderBehindWalls = false;
+    public useTexture = false;
+    private device: GfxDevice;
+    private cache: GfxRenderCache;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, x: number, y: number, z: number, size: number, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0, renderBehindWalls: boolean = false) {
+        this.device = device;
+        this.cache = cache;
         vec3.set(this.position, x, y, z);
         this.size = size;
         vec4.set(this.color, r, g, b, a);
@@ -139,6 +153,56 @@ export class BillboardRenderer {
         this.createTestTexture(device, cache);
     }
 
+    public loadImageFromFile(file: File): void {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                // Create canvas to extract image data
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d')!;
+                ctx.drawImage(img, 0, 0);
+
+                const imageData = ctx.getImageData(0, 0, img.width, img.height);
+                const pixels = new Uint8Array(imageData.data.buffer);
+
+                // Destroy old texture if it exists
+                if (this.textureMapping.gfxTexture !== null) {
+                    this.device.destroyTexture(this.textureMapping.gfxTexture);
+                }
+
+                // Create new texture from image
+                const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, img.width, img.height, 1));
+                this.device.setResourceName(gfxTexture, `Billboard Image: ${file.name}`);
+                this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+
+                const gfxSampler = this.cache.createSampler({
+                    wrapS: GfxWrapMode.Clamp,
+                    wrapT: GfxWrapMode.Clamp,
+                    minFilter: GfxTexFilterMode.Bilinear,
+                    magFilter: GfxTexFilterMode.Bilinear,
+                    mipFilter: GfxMipFilterMode.Nearest,
+                    minLOD: 0,
+                    maxLOD: 0,
+                });
+
+                this.textureMapping.gfxTexture = gfxTexture;
+                this.textureMapping.gfxSampler = gfxSampler;
+                this.useTexture = true;
+
+                console.log(`✓ Billboard texture loaded: ${file.name} (${img.width}x${img.height})`);
+            };
+            img.onerror = () => {
+                console.error(`✗ Failed to load billboard image: ${file.name}`);
+                this.useTexture = false;
+            };
+            img.src = e.target!.result as string;
+        };
+        reader.readAsDataURL(file);
+    }
+
     private createTestTexture(device: GfxDevice, cache: GfxRenderCache): void {
         // Create a simple 64x64 test texture (blue square)
         const size = 64;
@@ -193,13 +257,13 @@ export class BillboardRenderer {
 
         // Configure depth testing based on renderBehindWalls flag
         if (this.renderBehindWalls) {
-            // Inverted mode: only render when behind walls (for "painting" effect)
-            this.megaStateFlags.depthWrite = false;
-            this.megaStateFlags.depthCompare = GfxCompareMode.Greater;
-        } else {
             // Normal mode: render in front of walls, occluded by geometry
             this.megaStateFlags.depthWrite = true;
             this.megaStateFlags.depthCompare = GfxCompareMode.LessEqual;
+        } else {
+            // Inverted mode: only render when behind walls (for "painting" effect)
+            this.megaStateFlags.depthWrite = false;
+            this.megaStateFlags.depthCompare = GfxCompareMode.Greater;
         }
 
         const renderInst = renderInstManager.newRenderInst();
@@ -219,12 +283,13 @@ export class BillboardRenderer {
         const modelViewMatrix = mat4.create();
         mat4.multiply(modelViewMatrix, viewMatrix, billboardMatrix);
 
-        // Upload scene params (projection + modelview + color)
-        let offs = renderInst.allocateUniformBuffer(BillboardProgram.ub_SceneParams, 16 + 16 + 4);
+        // Upload scene params (projection + modelview + color + params)
+        let offs = renderInst.allocateUniformBuffer(BillboardProgram.ub_SceneParams, 16 + 16 + 4 + 4);
         const sceneParamsF32 = renderInst.mapUniformBufferF32(BillboardProgram.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsF32, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x4(sceneParamsF32, offs, modelViewMatrix);
         offs += fillVec4(sceneParamsF32, offs, this.color[0], this.color[1], this.color[2], this.color[3]);
+        offs += fillVec4(sceneParamsF32, offs, this.useTexture ? 1.0 : 0.0, 0.0, 0.0, 0.0);
 
         renderInstManager.submitRenderInst(renderInst);
     }
