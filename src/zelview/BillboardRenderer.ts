@@ -55,10 +55,9 @@ in vec2 v_TexCoord;
 
 void main() {
     if (u_Params.x > 0.5) {
-        // Try sampling texture
+        // Use texture with proper alpha blending
         vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-        // Output texture directly, force alpha to 1.0
-        gl_FragColor = vec4(texColor.rgb, 1.0);
+        gl_FragColor = texColor * u_Color;
     } else {
         // Use solid color
         gl_FragColor = u_Color;
@@ -219,61 +218,50 @@ export class BillboardRenderer {
     }
 
     private createTestTexture(device: GfxDevice, cache: GfxRenderCache): void {
-        const targetSize = 64;
-
-        // Load bocchi.png and convert to 64x64
+        // Load bocchi.png at original resolution
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            canvas.width = targetSize;
-            canvas.height = targetSize;
+            canvas.width = img.width;
+            canvas.height = img.height;
             const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
 
-            // Calculate scaling to fit image within 64x64 while maintaining aspect ratio
-            const scale = Math.min(targetSize / img.width, targetSize / img.height);
-            const scaledWidth = img.width * scale;
-            const scaledHeight = img.height * scale;
+            // Draw image at original size
+            ctx.drawImage(img, 0, 0);
 
-            // Center the image and pad with transparent pixels
-            const offsetX = (targetSize - scaledWidth) / 2;
-            const offsetY = (targetSize - scaledHeight) / 2;
-
-            // Clear to transparent
-            ctx.clearRect(0, 0, targetSize, targetSize);
-
-            // Draw scaled and centered image
-            ctx.drawImage(img, offsetX, offsetY, scaledWidth, scaledHeight);
-
-            const imageData = ctx.getImageData(0, 0, targetSize, targetSize);
+            const imageData = ctx.getImageData(0, 0, img.width, img.height);
             const pixels = new Uint8Array(imageData.data.buffer);
 
-            // Destroy old texture
+            // Destroy old placeholder texture
             device.destroyTexture(this.textureMapping.gfxTexture!);
 
-            // Create new texture from bocchi.png
-            const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, targetSize, targetSize, 1));
+            // Create new texture from bocchi.png at original size
+            const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, img.width, img.height, 1));
             device.setResourceName(gfxTexture, 'Billboard Test Texture (bocchi.png)');
             device.uploadTextureData(gfxTexture, 0, [pixels]);
 
             this.textureMapping.gfxTexture = gfxTexture;
+            this.textureMapping.width = img.width;
+            this.textureMapping.height = img.height;
 
-            console.log(`✓ Billboard test texture loaded: bocchi.png (${img.width}x${img.height} → ${targetSize}x${targetSize})`);
+            console.log(`✓ Billboard test texture loaded: bocchi.png (${img.width}x${img.height})`);
         };
 
         img.onerror = () => {
             console.error('✗ Failed to load bocchi.png');
         };
 
-        // Create initial red placeholder texture
-        const pixels = new Uint8Array(targetSize * targetSize * 4);
-        for (let i = 0; i < targetSize * targetSize; i++) {
+        // Create initial 64x64 red placeholder texture
+        const placeholderSize = 64;
+        const pixels = new Uint8Array(placeholderSize * placeholderSize * 4);
+        for (let i = 0; i < placeholderSize * placeholderSize; i++) {
             pixels[i * 4 + 0] = 255;  // R
             pixels[i * 4 + 1] = 0;    // G
             pixels[i * 4 + 2] = 0;    // B
             pixels[i * 4 + 3] = 255;  // A
         }
 
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, targetSize, targetSize, 1));
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, placeholderSize, placeholderSize, 1));
         device.setResourceName(gfxTexture, 'Billboard Placeholder Texture');
         device.uploadTextureData(gfxTexture, 0, [pixels]);
 
@@ -289,8 +277,8 @@ export class BillboardRenderer {
 
         this.textureMapping.gfxTexture = gfxTexture;
         this.textureMapping.gfxSampler = gfxSampler;
-        this.textureMapping.width = targetSize;
-        this.textureMapping.height = targetSize;
+        this.textureMapping.width = placeholderSize;
+        this.textureMapping.height = placeholderSize;
 
         // Start loading bocchi.png
         img.src = 'data/ZeldaOcarinaOfTime/bocchi.png';
