@@ -49,15 +49,16 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_Params; // x: useTexture flag
 };
 
-uniform sampler2D u_Texture;
+layout(binding = 0) uniform sampler2D u_Texture;
 
 in vec2 v_TexCoord;
 
 void main() {
     if (u_Params.x > 0.5) {
-        // Use texture
+        // Try sampling texture
         vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-        gl_FragColor = texColor * u_Color;
+        // Output texture directly, force alpha to 1.0
+        gl_FragColor = vec4(texColor.rgb, 1.0);
     } else {
         // Use solid color
         gl_FragColor = u_Color;
@@ -86,7 +87,7 @@ export class BillboardRenderer {
     public visible = true;
     public color = vec4.fromValues(1.0, 1.0, 1.0, 1.0);
     public renderBehindWalls = false;
-    public useTexture = false;
+    public useTexture = true;
     private device: GfxDevice;
     private cache: GfxRenderCache;
 
@@ -162,11 +163,21 @@ export class BillboardRenderer {
                 const canvas = document.createElement('canvas');
                 canvas.width = img.width;
                 canvas.height = img.height;
-                const ctx = canvas.getContext('2d')!;
+                const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+
+                // Draw image normally (no flipping needed)
                 ctx.drawImage(img, 0, 0);
 
                 const imageData = ctx.getImageData(0, 0, img.width, img.height);
                 const pixels = new Uint8Array(imageData.data.buffer);
+
+                // Debug: Sample a few pixels to verify data
+                const samplePixels = [
+                    Array.from(pixels.slice(0, 4)),           // Top-left
+                    Array.from(pixels.slice((img.width - 1) * 4, (img.width - 1) * 4 + 4)),  // Top-right
+                    Array.from(pixels.slice((img.width * img.height - img.width) * 4, (img.width * img.height - img.width) * 4 + 4))  // Bottom-left
+                ];
+                console.log(`Sampled pixels (RGBA) - TL/TR/BL:`, samplePixels);
 
                 // Destroy old texture if it exists
                 if (this.textureMapping.gfxTexture !== null) {
@@ -188,8 +199,12 @@ export class BillboardRenderer {
                     maxLOD: 0,
                 });
 
+                // Create fresh TextureMapping to avoid any potential caching issues
+                this.textureMapping = new TextureMapping();
                 this.textureMapping.gfxTexture = gfxTexture;
                 this.textureMapping.gfxSampler = gfxSampler;
+                this.textureMapping.width = img.width;
+                this.textureMapping.height = img.height;
                 this.useTexture = true;
 
                 console.log(`✓ Billboard texture loaded: ${file.name} (${img.width}x${img.height})`);
@@ -204,34 +219,62 @@ export class BillboardRenderer {
     }
 
     private createTestTexture(device: GfxDevice, cache: GfxRenderCache): void {
-        // Create a simple 64x64 test texture (blue square)
-        const size = 64;
-        const pixels = new Uint8Array(size * size * 4);
+        const targetSize = 64;
 
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                const idx = (y * size + x) * 4;
+        // Load bocchi.png and convert to 64x64
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = targetSize;
+            canvas.height = targetSize;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
 
-                // Blue square with slight border
-                const border = 2;
-                if (x < border || x >= size - border || y < border || y >= size - border) {
-                    // White border
-                    pixels[idx + 0] = 255;  // R
-                    pixels[idx + 1] = 255;  // G
-                    pixels[idx + 2] = 255;  // B
-                    pixels[idx + 3] = 255;  // A
-                } else {
-                    // Blue interior
-                    pixels[idx + 0] = 50;   // R
-                    pixels[idx + 1] = 150;  // G
-                    pixels[idx + 2] = 255;  // B
-                    pixels[idx + 3] = 255;  // A
-                }
-            }
+            // Calculate scaling to fit image within 64x64 while maintaining aspect ratio
+            const scale = Math.min(targetSize / img.width, targetSize / img.height);
+            const scaledWidth = img.width * scale;
+            const scaledHeight = img.height * scale;
+
+            // Center the image and pad with transparent pixels
+            const offsetX = (targetSize - scaledWidth) / 2;
+            const offsetY = (targetSize - scaledHeight) / 2;
+
+            // Clear to transparent
+            ctx.clearRect(0, 0, targetSize, targetSize);
+
+            // Draw scaled and centered image
+            ctx.drawImage(img, offsetX, offsetY, scaledWidth, scaledHeight);
+
+            const imageData = ctx.getImageData(0, 0, targetSize, targetSize);
+            const pixels = new Uint8Array(imageData.data.buffer);
+
+            // Destroy old texture
+            device.destroyTexture(this.textureMapping.gfxTexture!);
+
+            // Create new texture from bocchi.png
+            const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, targetSize, targetSize, 1));
+            device.setResourceName(gfxTexture, 'Billboard Test Texture (bocchi.png)');
+            device.uploadTextureData(gfxTexture, 0, [pixels]);
+
+            this.textureMapping.gfxTexture = gfxTexture;
+
+            console.log(`✓ Billboard test texture loaded: bocchi.png (${img.width}x${img.height} → ${targetSize}x${targetSize})`);
+        };
+
+        img.onerror = () => {
+            console.error('✗ Failed to load bocchi.png');
+        };
+
+        // Create initial red placeholder texture
+        const pixels = new Uint8Array(targetSize * targetSize * 4);
+        for (let i = 0; i < targetSize * targetSize; i++) {
+            pixels[i * 4 + 0] = 255;  // R
+            pixels[i * 4 + 1] = 0;    // G
+            pixels[i * 4 + 2] = 0;    // B
+            pixels[i * 4 + 3] = 255;  // A
         }
 
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, size, size, 1));
-        device.setResourceName(gfxTexture, 'Billboard Test Texture');
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, targetSize, targetSize, 1));
+        device.setResourceName(gfxTexture, 'Billboard Placeholder Texture');
         device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         const gfxSampler = cache.createSampler({
@@ -246,6 +289,11 @@ export class BillboardRenderer {
 
         this.textureMapping.gfxTexture = gfxTexture;
         this.textureMapping.gfxSampler = gfxSampler;
+        this.textureMapping.width = targetSize;
+        this.textureMapping.height = targetSize;
+
+        // Start loading bocchi.png
+        img.src = 'data/ZeldaOcarinaOfTime/bocchi.png';
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -254,6 +302,7 @@ export class BillboardRenderer {
 
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
+
 
         // Configure depth testing based on renderBehindWalls flag
         if (this.renderBehindWalls) {
@@ -268,9 +317,9 @@ export class BillboardRenderer {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setSamplerBindingsFromTextureMappings([this.textureMapping]);
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.setDrawCount(6, 0);
 
