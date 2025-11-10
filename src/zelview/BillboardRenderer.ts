@@ -170,14 +170,6 @@ export class BillboardRenderer {
                 const imageData = ctx.getImageData(0, 0, img.width, img.height);
                 const pixels = new Uint8Array(imageData.data.buffer);
 
-                // Debug: Sample a few pixels to verify data
-                const samplePixels = [
-                    Array.from(pixels.slice(0, 4)),           // Top-left
-                    Array.from(pixels.slice((img.width - 1) * 4, (img.width - 1) * 4 + 4)),  // Top-right
-                    Array.from(pixels.slice((img.width * img.height - img.width) * 4, (img.width * img.height - img.width) * 4 + 4))  // Bottom-left
-                ];
-                console.log(`Sampled pixels (RGBA) - TL/TR/BL:`, samplePixels);
-
                 // Destroy old texture if it exists
                 if (this.textureMapping.gfxTexture !== null) {
                     this.device.destroyTexture(this.textureMapping.gfxTexture);
