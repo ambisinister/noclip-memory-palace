@@ -91,7 +91,7 @@ export class BillboardRenderer {
     protected device: GfxDevice;
     protected cache: GfxRenderCache;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, x: number, y: number, z: number, size: number, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0, renderBehindWalls: boolean = false) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, x: number, y: number, z: number, size: number, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0, renderBehindWalls: boolean = false, skipDefaultTexture: boolean = false) {
         this.device = device;
         this.cache = cache;
         vec3.set(this.position, x, y, z);
@@ -150,8 +150,10 @@ export class BillboardRenderer {
         });
         this.megaStateFlags.cullMode = GfxCullMode.None;
 
-        // Create a simple test texture
-        this.createTestTexture(device, cache);
+        // Create a simple test texture (unless skipDefaultTexture is true)
+        if (!skipDefaultTexture) {
+            this.createTestTexture(device, cache);
+        }
     }
 
     public loadImageFromFile(file: File): void {

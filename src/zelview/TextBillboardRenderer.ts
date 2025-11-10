@@ -7,7 +7,7 @@ export class TextBillboardRenderer extends BillboardRenderer {
     private textContent: string = '';
 
     constructor(device: GfxDevice, cache: GfxRenderCache, x: number, y: number, z: number, size: number, text: string) {
-        super(device, cache, x, y, z, size, 1.0, 1.0, 1.0, 1.0, false);
+        super(device, cache, x, y, z, size, 1.0, 1.0, 1.0, 1.0, false, true);
         this.textContent = text;
         this.useTexture = true;
         this.createTextTexture(device, cache);
