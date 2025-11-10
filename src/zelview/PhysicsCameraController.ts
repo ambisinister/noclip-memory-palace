@@ -212,12 +212,74 @@ export class PhysicsCameraController extends FPSCameraController {
             if (Math.abs(mouseMovement[1]) < mouseMoveLowSpeedCap) mouseMovement[1] = 0.0;
         }
 
+        // Keep camera upright - prevent roll/tilt by ensuring up vector is always world up
+        this.enforceUprightOrientation(camera.worldMatrix);
+
         this.camera.isOrthographic = false;
         this.camera.worldMatrixUpdated();
 
         this.forceUpdate = false;
 
         return important ? CameraUpdateResult.ImportantChange : updated ? CameraUpdateResult.Changed : CameraUpdateResult.Unchanged;
+    }
+
+    /**
+     * Enforce upright orientation - keeps camera parallel to ground
+     * Prevents roll/tilt by ensuring the right vector is always horizontal
+     * Still allows looking up and down
+     */
+    private enforceUprightOrientation(worldMatrix: mat4): void {
+        // Extract current position
+        const position = scratchVec3a;
+        position[0] = worldMatrix[12];
+        position[1] = worldMatrix[13];
+        position[2] = worldMatrix[14];
+
+        // Extract forward direction (Z axis) - keep as-is to allow looking up/down
+        const forward = scratchVec3b;
+        forward[0] = worldMatrix[8];
+        forward[1] = worldMatrix[9];
+        forward[2] = worldMatrix[10];
+        vec3.normalize(forward, forward);
+
+        // Calculate right vector - must be horizontal (perpendicular to world up)
+        const right = scratchVec3c;
+        vec3.cross(right, Vec3UnitY, forward);
+
+        // Handle edge case: if looking straight up or down, forward is parallel to world up
+        const rightLength = vec3.length(right);
+        if (rightLength < 0.001) {
+            // Use a default right vector
+            vec3.set(right, 1, 0, 0);
+        } else {
+            vec3.normalize(right, right);
+        }
+
+        // Recalculate up vector to ensure orthogonality (forms proper basis)
+        const up = scratchVec3d;
+        vec3.cross(up, forward, right);
+        vec3.normalize(up, up);
+
+        // Rebuild the matrix with corrected orientation
+        // Right vector (X axis) - guaranteed horizontal
+        worldMatrix[0] = right[0];
+        worldMatrix[1] = right[1];
+        worldMatrix[2] = right[2];
+
+        // Up vector (Y axis) - perpendicular to both forward and right
+        worldMatrix[4] = up[0];
+        worldMatrix[5] = up[1];
+        worldMatrix[6] = up[2];
+
+        // Forward vector (Z axis) - preserved from original
+        worldMatrix[8] = forward[0];
+        worldMatrix[9] = forward[1];
+        worldMatrix[10] = forward[2];
+
+        // Restore position
+        worldMatrix[12] = position[0];
+        worldMatrix[13] = position[1];
+        worldMatrix[14] = position[2];
     }
 
     /**
