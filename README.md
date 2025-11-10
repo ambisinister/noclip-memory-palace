@@ -1,14 +1,6 @@
-<img align="right" src="src/assets/logo.png">
+# Noclip Memory Palace
 
-# <a href="https://noclip.website">noclip</a>
-
-The reverse engineering of model formats was done by many people. See the application for full credits.
-
-## Contributing
-
-Contributions are very welcome! New games, new features, and bug fixes are all very appreciated. Even small contributions like proper map names, grouping maps and new default savestates are extremely helpful.
-
-If you would like contribute, there is a Getting Started guide in the [Official noclip.website Discord Server](https://discord.gg/bkJmKKv), pinned in the #development channel. A number of developers from the community are present there and can help answer questions if you run into any additional issues getting set up.
+This is a fork of the beautiful noclip.website. What we're adding in this repo is the ability to use the game environments as a virtual memory palace. Navigate 3D spaces and place interactive markers to associate information with locations. All of the hard stuff was done by the original maintainers of this repo! We stand on the shoulders of giants. 
 
 ## Controls
 
@@ -16,6 +8,7 @@ Key | Description
 -|-
 `Z` | Show/hide all UI
 `T` | Open "Games" list
+`C` | Show/hide dialog box for nearby markers
 `W`/`A`/`S`/`D` or Arrow Keys | Move camera
 Hold `Shift` | Make camera move faster
 Hold `\` | Make camera move slower
@@ -37,24 +30,3 @@ Hold `\` | Make camera move slower
 `Numpad 5` | Immediately stop all orbiting (requries Orbit or Ortho camera modes)
 `Numpad 2`/`Numpad 4`/`Numpad 6`/`Numpad 8` | Snap view to front/left/right/top view (requires Orbit camera mode)
 `F` | Not sure what this key does, let me know if you figure it out
-
-## Third-Party Credits
-
-All icons you see are from [The Noun Project](https://thenounproject.com/), used under Creative Commons CC-BY:
-* Truncated Pyramid by Bohdan Burmich
-* Images by Creative Stall
-* Help by Gregor Cresnar
-* Open by Landan Lloyd
-* Nightshift by mikicon
-* Layer by Chameleon Design
-* Sand Clock by James
-* Line Chart by Shastry
-* Search by Alain W.
-* Save by Prime Icons
-* Overlap by Zach Bogart
-* VR by Fauzan Adaiima
-* Play Clapboard by Yoyon Pujiyono
-* Undo by Numero Uno
-* Redo by Numero Uno
-* Zoom In by Tanvir Islam
-* Zoom Out by Tanvir Islam
