@@ -1,7 +1,9 @@
 import { vec3 } from 'gl-matrix';
 import { BillboardRenderer } from './BillboardRenderer.js';
-import { GfxDevice, GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxFormat, makeTextureDescriptor2D, GfxCompareMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import * as Viewer from '../viewer.js';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 
 export class TextBillboardRenderer extends BillboardRenderer {
     private textContent: string = '';
@@ -18,11 +20,21 @@ export class TextBillboardRenderer extends BillboardRenderer {
         this.createTextTexture(this.device, this.cache);
     }
 
+    public override prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        // Override depth settings before rendering to always render on top
+        // Don't write to depth buffer, and always pass depth test
+        this.megaStateFlags.depthWrite = false;
+        this.megaStateFlags.depthCompare = GfxCompareMode.Always;
+
+        // Call parent to do the actual rendering
+        super.prepareToRender(device, renderInstManager, viewerInput);
+    }
+
     private createTextTexture(device: GfxDevice, cache: GfxRenderCache): void {
-        // Create canvas for text rendering
+        // Create canvas for text rendering - wider than tall for dialog box look
         const canvas = document.createElement('canvas');
-        const width = 512;
-        const height = 256;
+        const width = 640;
+        const height = 180;
         canvas.width = width;
         canvas.height = height;
 
@@ -37,15 +49,15 @@ export class TextBillboardRenderer extends BillboardRenderer {
         ctx.lineWidth = 4;
         ctx.strokeRect(2, 2, width - 4, height - 4);
 
-        // Text styling
+        // Text styling - smaller font to fit more text
         ctx.fillStyle = '#ffffff';
-        ctx.font = '20px monospace';
+        ctx.font = '14px monospace';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
 
         // Word wrap the text
         const maxWidth = width - 40;
-        const lineHeight = 24;
+        const lineHeight = 18;
         const padding = 20;
 
         this.wrapText(ctx, this.textContent, padding, padding, maxWidth, lineHeight);

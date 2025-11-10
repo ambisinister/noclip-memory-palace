@@ -79,7 +79,7 @@ export class BillboardRenderer {
     private program: BillboardProgram;
     private gfxProgram: GfxProgram | null = null;
     protected textureMapping = new TextureMapping();
-    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+    protected megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
     public position = vec3.create();
     public size = 100.0;
