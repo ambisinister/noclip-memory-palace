@@ -13,6 +13,7 @@ import * as UI from '../ui.js';
 import { GfxrAttachmentClearDescriptor, GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { BillboardRenderer } from './BillboardRenderer.js';
+import { PhysicsCameraController } from './PhysicsCameraController.js';
 
 const pathBase = `ZeldaOcarinaOfTime`;
 
@@ -33,6 +34,10 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         this.device = device;
         this.renderHelper = new GfxRenderHelper(device);
         this.clearAttachmentDescriptor = makeAttachmentClearDescriptor(OpaqueBlack);
+    }
+
+    public createCameraController(): CameraController {
+        return new PhysicsCameraController();
     }
 
     public createPanels(): UI.Panel[] {
@@ -361,6 +366,12 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
     public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(16/60);
+
+        // Pass mesh data to physics camera controller for collision detection
+        if (c instanceof PhysicsCameraController) {
+            c.setMeshDatas(this.meshDatas);
+            console.log(`🎮 Physics camera controller initialized with ${this.meshDatas.length} collision meshes`);
+        }
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
