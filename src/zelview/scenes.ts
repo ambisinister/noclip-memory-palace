@@ -14,6 +14,8 @@ import { GfxrAttachmentClearDescriptor, GfxrAttachmentSlot } from '../gfx/render
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { BillboardRenderer } from './BillboardRenderer.js';
 import { PhysicsCameraController } from './PhysicsCameraController.js';
+import { TextBillboardRenderer } from './TextBillboardRenderer.js';
+import { mat4, vec3 } from 'gl-matrix';
 
 const pathBase = `ZeldaOcarinaOfTime`;
 
@@ -24,6 +26,8 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     public meshRenderers: RootMeshRenderer[] = [];
     public billboardRenderers: BillboardRenderer[] = [];
     public selectedBillboardIndex: number = -1;
+    private textBillboards: TextBillboardRenderer[] = [];
+    private textBillboardsVisible: boolean = false;
 
     public renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
@@ -34,6 +38,13 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         this.device = device;
         this.renderHelper = new GfxRenderHelper(device);
         this.clearAttachmentDescriptor = makeAttachmentClearDescriptor(OpaqueBlack);
+
+        // Add keyboard handler for dialogue toggle
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyC') {
+                this.toggleAllDialogues();
+            }
+        });
     }
 
     public createCameraController(): CameraController {
@@ -388,8 +399,65 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.billboardRenderers.length; i++)
             this.billboardRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
+        // Render text billboards if visible
+        if (this.textBillboardsVisible) {
+            for (let i = 0; i < this.textBillboards.length; i++)
+                this.textBillboards[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
+
         this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
+    }
+
+    private toggleAllDialogues(): void {
+        this.textBillboardsVisible = !this.textBillboardsVisible;
+
+        if (this.textBillboardsVisible) {
+            // Create text billboards for all regular billboards
+            this.createAllTextBillboards();
+            console.log(`✓ Showing ${this.textBillboards.length} dialogue boxes (Press C to hide)`);
+        } else {
+            console.log('✗ Hiding all dialogue boxes (Press C to show)');
+        }
+    }
+
+    private createAllTextBillboards(): void {
+        // Clear existing text billboards
+        for (const textBillboard of this.textBillboards) {
+            textBillboard.destroy(this.device);
+        }
+        this.textBillboards = [];
+
+        // Create text billboard for each regular billboard
+        const loremIpsum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.";
+        const words = loremIpsum.split(' ');
+
+        for (let i = 0; i < this.billboardRenderers.length; i++) {
+            const billboard = this.billboardRenderers[i];
+
+            // Generate unique dialogue based on billboard index
+            const offset = i * 5 % words.length;
+            const dialogueWords = [...words.slice(offset), ...words.slice(0, offset)];
+            const dialogue = dialogueWords.slice(0, 40).join(' ') + '...';
+
+            // Position text billboard next to the regular billboard
+            const textX = billboard.position[0] + billboard.size * 1.5;
+            const textY = billboard.position[1];
+            const textZ = billboard.position[2];
+
+            // Create text billboard
+            const textBillboard = new TextBillboardRenderer(
+                this.device,
+                this.renderHelper.renderCache,
+                textX,
+                textY,
+                textZ,
+                300, // size
+                dialogue
+            );
+
+            this.textBillboards.push(textBillboard);
+        }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -425,6 +493,8 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             this.meshRenderers[i].destroy(device);
         for (let i = 0; i < this.billboardRenderers.length; i++)
             this.billboardRenderers[i].destroy(device);
+        for (let i = 0; i < this.textBillboards.length; i++)
+            this.textBillboards[i].destroy(device);
     }
 
     public addBillboard(device: GfxDevice, x: number, y: number, z: number, size: number = 100, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0, renderBehindWalls: boolean = false): void {

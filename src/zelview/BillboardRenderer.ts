@@ -78,7 +78,7 @@ export class BillboardRenderer {
     private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private program: BillboardProgram;
     private gfxProgram: GfxProgram | null = null;
-    private textureMapping = new TextureMapping();
+    protected textureMapping = new TextureMapping();
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
     public position = vec3.create();
@@ -87,8 +87,9 @@ export class BillboardRenderer {
     public color = vec4.fromValues(1.0, 1.0, 1.0, 1.0);
     public renderBehindWalls = false;
     public useTexture = true;
-    private device: GfxDevice;
-    private cache: GfxRenderCache;
+    public dialogueText: string = '';
+    protected device: GfxDevice;
+    protected cache: GfxRenderCache;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, x: number, y: number, z: number, size: number, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0, renderBehindWalls: boolean = false) {
         this.device = device;
