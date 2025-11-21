@@ -27,13 +27,17 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     public selectedBillboardIndex: number = -1;
     private dialogBoxElement: HTMLDivElement | null = null;
     private dialogTextElement: HTMLDivElement | null = null;
+    public sceneId: string = 'spot04_scene'; // Default to Kokiri Forest
 
     public renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private device: GfxDevice;
     private currentCamera: Viewer.ViewerRenderInput | null = null;
 
-    constructor(device: GfxDevice, private zelview: ZELVIEW0) {
+    constructor(device: GfxDevice, private zelview: ZELVIEW0, sceneId?: string) {
+        if (sceneId) {
+            this.sceneId = sceneId;
+        }
         this.device = device;
         this.renderHelper = new GfxRenderHelper(device);
         this.clearAttachmentDescriptor = makeAttachmentClearDescriptor(OpaqueBlack);
@@ -337,7 +341,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'kokiri_forest_billboards.json';
+            a.download = `${this.sceneId}_billboards.json`;
             a.click();
             URL.revokeObjectURL(url);
             console.log(`💾 Exported ${this.billboardRenderers.length} billboards to JSON`);
@@ -830,8 +834,9 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     private autoSaveBillboards(): void {
         try {
             const json = this.exportBillboardsToJSON();
-            localStorage.setItem('billboards_kokiri_forest', json);
-            console.log(`💾 Auto-saved ${this.billboardRenderers.length} billboards to localStorage`);
+            const storageKey = `billboards_${this.sceneId}`;
+            localStorage.setItem(storageKey, json);
+            console.log(`💾 Auto-saved ${this.billboardRenderers.length} billboards to localStorage (${this.sceneId})`);
         } catch (error) {
             console.error('Failed to auto-save billboards:', error);
         }
@@ -839,10 +844,11 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
     private autoLoadBillboards(): void {
         try {
-            const json = localStorage.getItem('billboards_kokiri_forest');
+            const storageKey = `billboards_${this.sceneId}`;
+            const json = localStorage.getItem(storageKey);
             if (json) {
                 this.importBillboardsFromJSON(json);
-                console.log(`📂 Auto-loaded billboards from localStorage`);
+                console.log(`📂 Auto-loaded billboards from localStorage (${this.sceneId})`);
             }
         } catch (error) {
             console.error('Failed to auto-load billboards:', error);
@@ -869,7 +875,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
         return JSON.stringify({
             version: 1,
-            scene: 'kokiri_forest',
+            scene: this.sceneId,
             billboards: billboardData
         }, null, 2);
     }
@@ -945,8 +951,8 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     }
 }
 
-function createRendererFromZELVIEW0(device: GfxDevice, zelview: ZELVIEW0): ZelviewRenderer {
-    const renderer = new ZelviewRenderer(device, zelview);
+function createRendererFromZELVIEW0(device: GfxDevice, zelview: ZELVIEW0, sceneId?: string): ZelviewRenderer {
+    const renderer = new ZelviewRenderer(device, zelview, sceneId);
 
     const headers = zelview.loadScene(zelview.sceneFile);
     // console.log(`headers: ${JSON.stringify(headers, null, '\t')}`);
@@ -1001,7 +1007,7 @@ export class ZelviewSceneDesc implements Viewer.SceneDesc {
         const zelviewData = await dataFetcher.fetchData(`${this.base}/${this.id}.zelview0`);
 
         const zelview0 = readZELVIEW0(zelviewData);
-        const renderer = createRendererFromZELVIEW0(device, zelview0);
+        const renderer = createRendererFromZELVIEW0(device, zelview0, this.id);
 
         // Expose renderer to browser console for testing
         (window as any).zelviewRenderer = renderer;

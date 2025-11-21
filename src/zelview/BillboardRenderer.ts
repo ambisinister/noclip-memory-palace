@@ -92,6 +92,9 @@ export class BillboardRenderer {
     public savedCameraOrientation: mat4 | null = null;
     public imageData: string | null = null; // Base64-encoded image data for persistence
     public imageName: string = 'bocchi.png'; // Name of the loaded image
+    public isWarpBillboard: boolean = false; // Whether this billboard warps to another scene
+    public targetScene: string = ''; // Target scene ID for warp billboards
+    public warpRadius: number = 150; // Collision radius for warp trigger
     protected device: GfxDevice;
     protected cache: GfxRenderCache;
 

@@ -12,6 +12,36 @@ pnpm run start
 
 This will build the Rust components and start the development server. The site will be available at the URL shown in the terminal (typically http://localhost:3000).
 
+## Downloading Scene Data
+
+To use Zelda: Ocarina of Time scenes locally, you need to download the scene files from noclip.website.
+
+### Quick Download
+
+```bash
+# Create the data directory
+mkdir -p data/ZeldaOcarinaOfTime
+
+# Download Kokiri Forest (example)
+cd data/ZeldaOcarinaOfTime
+wget https://z.noclip.website/ZeldaOcarinaOfTime/spot04_scene.zelview0
+
+# Download Inside the Deku Tree
+wget https://z.noclip.website/ZeldaOcarinaOfTime/ydan_scene.zelview0
+```
+
+### Available Scenes
+
+Scene files are hosted at: `https://z.noclip.website/ZeldaOcarinaOfTime/[scene_id].zelview0`
+
+Common scene IDs:
+- `spot04_scene` - Kokiri Forest
+- `ydan_scene` - Inside the Deku Tree
+- `ydan_boss_scene` - Deku Tree Boss Room
+- `spot01_scene` - Kakariko Village
+- `spot00_scene` - Hyrule Field
+- See `src/zelview/scenes.ts` for the full list
+
 ## Controls
 
 Key | Description

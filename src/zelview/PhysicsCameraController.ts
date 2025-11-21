@@ -21,6 +21,7 @@ export class PhysicsCameraController extends FPSCameraController {
     private terminalVelocity = -1000;
     private isGrounded = false;
     private isFlyMode = false;
+    private noclipMode = false; // Noclip mode - pass through walls but keep gravity
 
     // Collision properties
     private playerHeight = 100; // Height of player capsule
@@ -38,6 +39,13 @@ export class PhysicsCameraController extends FPSCameraController {
         const camera = this.camera;
         let updated = false;
         let important = false;
+
+        // Toggle noclip mode with Control key
+        if (inputManager.isKeyDownEventTriggered('ControlLeft') || inputManager.isKeyDownEventTriggered('ControlRight')) {
+            this.noclipMode = !this.noclipMode;
+            console.log(`🚫 Noclip mode: ${this.noclipMode ? 'ON (pass through walls)' : 'OFF (normal collision)'}`);
+            important = true;
+        }
 
         // Reset camera with B key
         if (inputManager.isKeyDown('KeyB')) {
@@ -365,6 +373,11 @@ export class PhysicsCameraController extends FPSCameraController {
      * Returns true if movement is valid, false if collision detected
      */
     private checkHorizontalCollision(newPosition: vec3): boolean {
+        // In noclip mode, allow all movement through walls
+        if (this.noclipMode) {
+            return true;
+        }
+
         // Simple cylinder collision check
         // For now, allow all movement - walls would require more complex collision
         // Could add simple distance checks to triangle edges here
