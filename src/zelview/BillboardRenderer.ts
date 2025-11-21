@@ -88,6 +88,8 @@ export class BillboardRenderer {
     public renderBehindWalls = false;
     public useTexture = true;
     public dialogueText: string = '';
+    public savedCameraPosition: vec3 | null = null;
+    public savedCameraOrientation: mat4 | null = null;
     protected device: GfxDevice;
     protected cache: GfxRenderCache;
 

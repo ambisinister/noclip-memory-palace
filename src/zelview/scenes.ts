@@ -104,13 +104,16 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             if (nearestBillboard) {
                 const billboardIndex = this.billboardRenderers.indexOf(nearestBillboard);
 
+                // Auto-select this billboard in the control panel
+                this.selectedBillboardIndex = billboardIndex;
+
                 // Use the billboard's custom dialogue text, or show a default message if empty
                 const dialogue = nearestBillboard.dialogueText || '(No text set for this billboard. Edit it in the Billboard Controls panel!)';
 
                 // Set text and show
                 this.dialogTextElement.textContent = dialogue;
                 this.dialogBoxElement.style.display = 'block';
-                console.log(`✓ Dialog box shown for billboard #${billboardIndex + 1} (Press C to hide)`);
+                console.log(`✓ Dialog box shown for billboard #${billboardIndex + 1} (Press C to hide) - Billboard auto-selected in panel`);
             } else {
                 console.log('⚠ No billboards nearby to interact with');
             }
@@ -145,6 +148,83 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         }
 
         return nearestBillboard;
+    }
+
+    private teleportToBillboard(billboardIndex: number): void {
+        if (!this.currentCamera || billboardIndex < 0 || billboardIndex >= this.billboardRenderers.length) {
+            return;
+        }
+
+        const billboard = this.billboardRenderers[billboardIndex];
+        const camera = this.currentCamera.camera;
+
+        // Check if billboard has a saved viewing angle
+        if (billboard.savedCameraPosition && billboard.savedCameraOrientation) {
+            // Use saved position and orientation
+            mat4.copy(camera.worldMatrix, billboard.savedCameraOrientation);
+            camera.worldMatrix[12] = billboard.savedCameraPosition[0];
+            camera.worldMatrix[13] = billboard.savedCameraPosition[1];
+            camera.worldMatrix[14] = billboard.savedCameraPosition[2];
+            camera.worldMatrixUpdated();
+            console.log(`🎯 Teleported to billboard #${billboardIndex + 1} (using saved viewing angle)`);
+            return;
+        }
+
+        // Default behavior: position in front of billboard and look at it
+        const billboardPos = vec3.clone(billboard.position);
+        const distance = 300;
+
+        // Calculate camera position (300 units in front along Z axis)
+        const cameraPos = vec3.fromValues(
+            billboardPos[0],
+            billboardPos[1],
+            billboardPos[2] - distance
+        );
+
+        // Create a "look at" matrix that faces the billboard
+        const eye = cameraPos;
+        const target = billboardPos;
+        const up = vec3.fromValues(0, 1, 0);
+
+        // Calculate forward vector (from camera to billboard)
+        const forward = vec3.create();
+        vec3.subtract(forward, target, eye);
+        vec3.normalize(forward, forward);
+
+        // Calculate right vector
+        const right = vec3.create();
+        vec3.cross(right, up, forward);
+        vec3.normalize(right, right);
+
+        // Recalculate up vector to ensure orthogonality
+        const newUp = vec3.create();
+        vec3.cross(newUp, forward, right);
+        vec3.normalize(newUp, newUp);
+
+        // Build world matrix (camera-to-world transform)
+        // In OpenGL/WebGL, camera looks down -Z, so forward is actually -Z
+        camera.worldMatrix[0] = right[0];
+        camera.worldMatrix[1] = right[1];
+        camera.worldMatrix[2] = right[2];
+        camera.worldMatrix[3] = 0;
+
+        camera.worldMatrix[4] = newUp[0];
+        camera.worldMatrix[5] = newUp[1];
+        camera.worldMatrix[6] = newUp[2];
+        camera.worldMatrix[7] = 0;
+
+        camera.worldMatrix[8] = forward[0];
+        camera.worldMatrix[9] = forward[1];
+        camera.worldMatrix[10] = forward[2];
+        camera.worldMatrix[11] = 0;
+
+        camera.worldMatrix[12] = cameraPos[0];
+        camera.worldMatrix[13] = cameraPos[1];
+        camera.worldMatrix[14] = cameraPos[2];
+        camera.worldMatrix[15] = 1;
+
+        camera.worldMatrixUpdated();
+        console.log(`🎯 Teleported to billboard #${billboardIndex + 1} at (${cameraPos[0].toFixed(1)}, ${cameraPos[1].toFixed(1)}, ${cameraPos[2].toFixed(1)})`);
     }
 
     public createCameraController(): CameraController {
@@ -242,9 +322,54 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         const selectedDiv = document.createElement('div');
         selectedDiv.style.fontSize = '11px';
         selectedDiv.style.color = '#ffa';
-        selectedDiv.style.marginBottom = '10px';
+        selectedDiv.style.marginBottom = '5px';
         selectedDiv.style.fontWeight = 'bold';
         billboardPanel.contents.appendChild(selectedDiv);
+
+        // Navigation buttons container
+        const navContainer = document.createElement('div');
+        navContainer.style.display = 'flex';
+        navContainer.style.gap = '5px';
+        navContainer.style.marginBottom = '10px';
+        billboardPanel.contents.appendChild(navContainer);
+
+        const prevButton = document.createElement('button');
+        prevButton.textContent = '← Previous';
+        prevButton.style.flex = '1';
+        prevButton.style.padding = '6px';
+        prevButton.style.cursor = 'pointer';
+        prevButton.style.backgroundColor = '#555';
+        prevButton.style.border = 'none';
+        prevButton.style.color = 'white';
+        prevButton.style.fontSize = '11px';
+        prevButton.onclick = () => {
+            if (this.billboardRenderers.length > 0) {
+                this.selectedBillboardIndex = (this.selectedBillboardIndex - 1 + this.billboardRenderers.length) % this.billboardRenderers.length;
+                this.teleportToBillboard(this.selectedBillboardIndex);
+                updateControls();
+                console.log(`◄ Selected billboard #${this.selectedBillboardIndex + 1}`);
+            }
+        };
+        navContainer.appendChild(prevButton);
+
+        const nextButton = document.createElement('button');
+        nextButton.textContent = 'Next →';
+        nextButton.style.flex = '1';
+        nextButton.style.padding = '6px';
+        nextButton.style.cursor = 'pointer';
+        nextButton.style.backgroundColor = '#555';
+        nextButton.style.border = 'none';
+        nextButton.style.color = 'white';
+        nextButton.style.fontSize = '11px';
+        nextButton.onclick = () => {
+            if (this.billboardRenderers.length > 0) {
+                this.selectedBillboardIndex = (this.selectedBillboardIndex + 1) % this.billboardRenderers.length;
+                this.teleportToBillboard(this.selectedBillboardIndex);
+                updateControls();
+                console.log(`► Selected billboard #${this.selectedBillboardIndex + 1}`);
+            }
+        };
+        navContainer.appendChild(nextButton);
 
         const controlsDiv = document.createElement('div');
         controlsDiv.style.display = 'none';
@@ -255,8 +380,11 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
             if (this.selectedBillboardIndex >= 0 && this.selectedBillboardIndex < this.billboardRenderers.length) {
                 const billboard = this.billboardRenderers[this.selectedBillboardIndex];
-                selectedDiv.textContent = `Selected: Billboard #${this.selectedBillboardIndex + 1}`;
+                selectedDiv.textContent = `Billboard ${this.selectedBillboardIndex + 1} of ${this.billboardRenderers.length}`;
                 controlsDiv.style.display = 'block';
+                navContainer.style.display = 'flex';
+                prevButton.disabled = this.billboardRenderers.length <= 1;
+                nextButton.disabled = this.billboardRenderers.length <= 1;
                 posXInput.value = billboard.position[0].toFixed(1);
                 posYInput.value = billboard.position[1].toFixed(1);
                 posZInput.value = billboard.position[2].toFixed(1);
@@ -270,6 +398,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             } else {
                 selectedDiv.textContent = 'No billboard selected';
                 controlsDiv.style.display = 'none';
+                navContainer.style.display = 'none';
             }
         };
 
@@ -474,6 +603,38 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         const renderBehindText = document.createElement('span');
         renderBehindText.textContent = 'Painting mode (only visible behind walls)';
         renderBehindLabel.appendChild(renderBehindText);
+
+        // Set Default Viewing Angle button
+        const setViewAngleButton = document.createElement('button');
+        setViewAngleButton.textContent = '📷 Set Default Viewing Angle';
+        setViewAngleButton.style.width = '100%';
+        setViewAngleButton.style.padding = '8px';
+        setViewAngleButton.style.marginBottom = '8px';
+        setViewAngleButton.style.cursor = 'pointer';
+        setViewAngleButton.style.backgroundColor = '#4a9eff';
+        setViewAngleButton.style.border = 'none';
+        setViewAngleButton.style.color = 'white';
+        setViewAngleButton.style.fontWeight = 'bold';
+        setViewAngleButton.onclick = () => {
+            if (this.selectedBillboardIndex >= 0 && this.currentCamera) {
+                const billboard = this.billboardRenderers[this.selectedBillboardIndex];
+                const camera = this.currentCamera.camera;
+
+                // Save current camera position
+                billboard.savedCameraPosition = vec3.fromValues(
+                    camera.worldMatrix[12],
+                    camera.worldMatrix[13],
+                    camera.worldMatrix[14]
+                );
+
+                // Save current camera orientation (copy the entire matrix)
+                billboard.savedCameraOrientation = mat4.clone(camera.worldMatrix);
+
+                console.log(`📷 Saved viewing angle for billboard #${this.selectedBillboardIndex + 1}`);
+                console.log(`   Position: (${billboard.savedCameraPosition[0].toFixed(1)}, ${billboard.savedCameraPosition[1].toFixed(1)}, ${billboard.savedCameraPosition[2].toFixed(1)})`);
+            }
+        };
+        controlsDiv.appendChild(setViewAngleButton);
 
         // Delete button
         const deleteButton = document.createElement('button');
