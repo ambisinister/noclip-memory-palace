@@ -90,6 +90,8 @@ export class BillboardRenderer {
     public dialogueText: string = '';
     public savedCameraPosition: vec3 | null = null;
     public savedCameraOrientation: mat4 | null = null;
+    public imageData: string | null = null; // Base64-encoded image data for persistence
+    public imageName: string = 'bocchi.png'; // Name of the loaded image
     protected device: GfxDevice;
     protected cache: GfxRenderCache;
 
@@ -161,57 +163,67 @@ export class BillboardRenderer {
     public loadImageFromFile(file: File): void {
         const reader = new FileReader();
         reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                // Create canvas to extract image data
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+            const dataUrl = e.target!.result as string;
 
-                // Draw image normally (no flipping needed)
-                ctx.drawImage(img, 0, 0);
+            // Save image data for persistence
+            this.imageData = dataUrl;
+            this.imageName = file.name;
 
-                const imageData = ctx.getImageData(0, 0, img.width, img.height);
-                const pixels = new Uint8Array(imageData.data.buffer);
-
-                // Destroy old texture if it exists
-                if (this.textureMapping.gfxTexture !== null) {
-                    this.device.destroyTexture(this.textureMapping.gfxTexture);
-                }
-
-                // Create new texture from image
-                const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, img.width, img.height, 1));
-                this.device.setResourceName(gfxTexture, `Billboard Image: ${file.name}`);
-                this.device.uploadTextureData(gfxTexture, 0, [pixels]);
-
-                const gfxSampler = this.cache.createSampler({
-                    wrapS: GfxWrapMode.Clamp,
-                    wrapT: GfxWrapMode.Clamp,
-                    minFilter: GfxTexFilterMode.Bilinear,
-                    magFilter: GfxTexFilterMode.Bilinear,
-                    mipFilter: GfxMipFilterMode.Nearest,
-                    minLOD: 0,
-                    maxLOD: 0,
-                });
-
-                // Create fresh TextureMapping to avoid any potential caching issues
-                this.textureMapping = new TextureMapping();
-                this.textureMapping.gfxTexture = gfxTexture;
-                this.textureMapping.gfxSampler = gfxSampler;
-                this.textureMapping.width = img.width;
-                this.textureMapping.height = img.height;
-                this.useTexture = true;
-
-                console.log(`✓ Billboard texture loaded: ${file.name} (${img.width}x${img.height})`);
-            };
-            img.onerror = () => {
-                console.error(`✗ Failed to load billboard image: ${file.name}`);
-                this.useTexture = false;
-            };
-            img.src = e.target!.result as string;
+            this.loadImageFromDataURL(dataUrl, file.name);
         };
         reader.readAsDataURL(file);
+    }
+
+    public loadImageFromDataURL(dataUrl: string, name: string): void {
+        const img = new Image();
+        img.onload = () => {
+            // Create canvas to extract image data
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+
+            // Draw image normally (no flipping needed)
+            ctx.drawImage(img, 0, 0);
+
+            const imageData = ctx.getImageData(0, 0, img.width, img.height);
+            const pixels = new Uint8Array(imageData.data.buffer);
+
+            // Destroy old texture if it exists
+            if (this.textureMapping.gfxTexture !== null) {
+                this.device.destroyTexture(this.textureMapping.gfxTexture);
+            }
+
+            // Create new texture from image
+            const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, img.width, img.height, 1));
+            this.device.setResourceName(gfxTexture, `Billboard Image: ${name}`);
+            this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+
+            const gfxSampler = this.cache.createSampler({
+                wrapS: GfxWrapMode.Clamp,
+                wrapT: GfxWrapMode.Clamp,
+                minFilter: GfxTexFilterMode.Bilinear,
+                magFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.Nearest,
+                minLOD: 0,
+                maxLOD: 0,
+            });
+
+            // Create fresh TextureMapping to avoid any potential caching issues
+            this.textureMapping = new TextureMapping();
+            this.textureMapping.gfxTexture = gfxTexture;
+            this.textureMapping.gfxSampler = gfxSampler;
+            this.textureMapping.width = img.width;
+            this.textureMapping.height = img.height;
+            this.useTexture = true;
+
+            console.log(`✓ Billboard texture loaded: ${name} (${img.width}x${img.height})`);
+        };
+        img.onerror = () => {
+            console.error(`✗ Failed to load billboard image: ${name}`);
+            this.useTexture = false;
+        };
+        img.src = dataUrl;
     }
 
     private createTestTexture(device: GfxDevice, cache: GfxRenderCache): void {

@@ -47,6 +47,9 @@ class ZelviewRenderer implements Viewer.SceneGfx {
                 this.toggleDialogueBox();
             }
         });
+
+        // Auto-load billboards from localStorage
+        this.autoLoadBillboards();
     }
 
     private createDialogBoxUI(): void {
@@ -311,6 +314,66 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         };
         billboardPanel.contents.appendChild(spawnButton);
 
+        // Export/Import buttons container
+        const exportImportContainer = document.createElement('div');
+        exportImportContainer.style.display = 'flex';
+        exportImportContainer.style.gap = '5px';
+        exportImportContainer.style.marginBottom = '10px';
+        billboardPanel.contents.appendChild(exportImportContainer);
+
+        const exportButton = document.createElement('button');
+        exportButton.textContent = '💾 Export JSON';
+        exportButton.style.flex = '1';
+        exportButton.style.padding = '8px';
+        exportButton.style.cursor = 'pointer';
+        exportButton.style.backgroundColor = '#2a7f2a';
+        exportButton.style.border = 'none';
+        exportButton.style.color = 'white';
+        exportButton.style.fontSize = '11px';
+        exportButton.style.fontWeight = 'bold';
+        exportButton.onclick = () => {
+            const json = this.exportBillboardsToJSON();
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'kokiri_forest_billboards.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            console.log(`💾 Exported ${this.billboardRenderers.length} billboards to JSON`);
+        };
+        exportImportContainer.appendChild(exportButton);
+
+        const importButton = document.createElement('button');
+        importButton.textContent = '📂 Import JSON';
+        importButton.style.flex = '1';
+        importButton.style.padding = '8px';
+        importButton.style.cursor = 'pointer';
+        importButton.style.backgroundColor = '#2a5f7f';
+        importButton.style.border = 'none';
+        importButton.style.color = 'white';
+        importButton.style.fontSize = '11px';
+        importButton.style.fontWeight = 'bold';
+        importButton.onclick = () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const json = event.target?.result as string;
+                        this.importBillboardsFromJSON(json);
+                        updateControls();
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        };
+        exportImportContainer.appendChild(importButton);
+
         const countDiv = document.createElement('div');
         countDiv.style.fontSize = '11px';
         countDiv.style.color = '#aaa';
@@ -423,6 +486,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         posXInput.oninput = () => {
             if (this.selectedBillboardIndex >= 0) {
                 this.billboardRenderers[this.selectedBillboardIndex].position[0] = parseFloat(posXInput.value) || 0;
+                this.autoSaveBillboards();
             }
         };
         posContainer.appendChild(posXInput);
@@ -434,6 +498,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         posYInput.oninput = () => {
             if (this.selectedBillboardIndex >= 0) {
                 this.billboardRenderers[this.selectedBillboardIndex].position[1] = parseFloat(posYInput.value) || 0;
+                this.autoSaveBillboards();
             }
         };
         posContainer.appendChild(posYInput);
@@ -445,6 +510,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         posZInput.oninput = () => {
             if (this.selectedBillboardIndex >= 0) {
                 this.billboardRenderers[this.selectedBillboardIndex].position[2] = parseFloat(posZInput.value) || 0;
+                this.autoSaveBillboards();
             }
         };
         posContainer.appendChild(posZInput);
@@ -466,6 +532,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             if (this.selectedBillboardIndex >= 0) {
                 this.billboardRenderers[this.selectedBillboardIndex].size = parseFloat(sizeInput.value);
                 sizeValueLabel.textContent = sizeInput.value;
+                this.autoSaveBillboards();
             }
         };
         controlsDiv.appendChild(sizeInput);
@@ -501,6 +568,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         colorRInput.oninput = () => {
             if (this.selectedBillboardIndex >= 0) {
                 this.billboardRenderers[this.selectedBillboardIndex].color[0] = parseFloat(colorRInput.value) || 0;
+                this.autoSaveBillboards();
             }
         };
         colorContainer.appendChild(colorRInput);
@@ -516,6 +584,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         colorGInput.oninput = () => {
             if (this.selectedBillboardIndex >= 0) {
                 this.billboardRenderers[this.selectedBillboardIndex].color[1] = parseFloat(colorGInput.value) || 0;
+                this.autoSaveBillboards();
             }
         };
         colorContainer.appendChild(colorGInput);
@@ -531,6 +600,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         colorBInput.oninput = () => {
             if (this.selectedBillboardIndex >= 0) {
                 this.billboardRenderers[this.selectedBillboardIndex].color[2] = parseFloat(colorBInput.value) || 0;
+                this.autoSaveBillboards();
             }
         };
         colorContainer.appendChild(colorBInput);
@@ -555,6 +625,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         dialogueTextInput.oninput = () => {
             if (this.selectedBillboardIndex >= 0) {
                 this.billboardRenderers[this.selectedBillboardIndex].dialogueText = dialogueTextInput.value;
+                this.autoSaveBillboards();
             }
         };
         controlsDiv.appendChild(dialogueTextInput);
@@ -576,6 +647,8 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         imageFileInput.onchange = () => {
             if (this.selectedBillboardIndex >= 0 && imageFileInput.files && imageFileInput.files[0]) {
                 this.billboardRenderers[this.selectedBillboardIndex].loadImageFromFile(imageFileInput.files[0]);
+                // Auto-save will happen after image loads
+                setTimeout(() => this.autoSaveBillboards(), 100);
             }
         };
         controlsDiv.appendChild(imageFileInput);
@@ -596,6 +669,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         renderBehindCheckbox.onchange = () => {
             if (this.selectedBillboardIndex >= 0) {
                 this.billboardRenderers[this.selectedBillboardIndex].renderBehindWalls = renderBehindCheckbox.checked;
+                this.autoSaveBillboards();
             }
         };
         renderBehindLabel.appendChild(renderBehindCheckbox);
@@ -632,6 +706,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
                 console.log(`📷 Saved viewing angle for billboard #${this.selectedBillboardIndex + 1}`);
                 console.log(`   Position: (${billboard.savedCameraPosition[0].toFixed(1)}, ${billboard.savedCameraPosition[1].toFixed(1)}, ${billboard.savedCameraPosition[2].toFixed(1)})`);
+                this.autoSaveBillboards();
             }
         };
         controlsDiv.appendChild(setViewAngleButton);
@@ -651,6 +726,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
                 this.billboardRenderers.splice(this.selectedBillboardIndex, 1);
                 this.selectedBillboardIndex = -1;
                 console.log('Billboard deleted');
+                this.autoSaveBillboards();
                 updateControls();
             }
         };
@@ -734,7 +810,138 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     public addBillboard(device: GfxDevice, x: number, y: number, z: number, size: number = 100, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0, renderBehindWalls: boolean = false): void {
         const billboard = new BillboardRenderer(device, this.renderHelper.renderCache, x, y, z, size, r, g, b, a, renderBehindWalls);
         billboard.dialogueText = 'Hello! This is a new billboard. Edit this text in the Billboard Controls panel.';
+
+        // Save current camera position/orientation as default viewing angle
+        if (this.currentCamera) {
+            const camera = this.currentCamera.camera;
+            billboard.savedCameraPosition = vec3.fromValues(
+                camera.worldMatrix[12],
+                camera.worldMatrix[13],
+                camera.worldMatrix[14]
+            );
+            billboard.savedCameraOrientation = mat4.clone(camera.worldMatrix);
+            console.log(`📷 Saved spawn position as default viewing angle for new billboard`);
+        }
+
         this.billboardRenderers.push(billboard);
+        this.autoSaveBillboards();
+    }
+
+    private autoSaveBillboards(): void {
+        try {
+            const json = this.exportBillboardsToJSON();
+            localStorage.setItem('billboards_kokiri_forest', json);
+            console.log(`💾 Auto-saved ${this.billboardRenderers.length} billboards to localStorage`);
+        } catch (error) {
+            console.error('Failed to auto-save billboards:', error);
+        }
+    }
+
+    private autoLoadBillboards(): void {
+        try {
+            const json = localStorage.getItem('billboards_kokiri_forest');
+            if (json) {
+                this.importBillboardsFromJSON(json);
+                console.log(`📂 Auto-loaded billboards from localStorage`);
+            }
+        } catch (error) {
+            console.error('Failed to auto-load billboards:', error);
+        }
+    }
+
+    public exportBillboardsToJSON(): string {
+        const billboardData = this.billboardRenderers.map((billboard, index) => ({
+            index,
+            position: [billboard.position[0], billboard.position[1], billboard.position[2]],
+            size: billboard.size,
+            color: [billboard.color[0], billboard.color[1], billboard.color[2], billboard.color[3]],
+            dialogueText: billboard.dialogueText,
+            renderBehindWalls: billboard.renderBehindWalls,
+            imageName: billboard.imageName,
+            imageData: billboard.imageData,
+            savedCameraPosition: billboard.savedCameraPosition ? [
+                billboard.savedCameraPosition[0],
+                billboard.savedCameraPosition[1],
+                billboard.savedCameraPosition[2]
+            ] : null,
+            savedCameraOrientation: billboard.savedCameraOrientation ? Array.from(billboard.savedCameraOrientation) : null,
+        }));
+
+        return JSON.stringify({
+            version: 1,
+            scene: 'kokiri_forest',
+            billboards: billboardData
+        }, null, 2);
+    }
+
+    public importBillboardsFromJSON(jsonString: string): void {
+        try {
+            const data = JSON.parse(jsonString);
+
+            if (!data.billboards || !Array.isArray(data.billboards)) {
+                console.error('Invalid billboard data format');
+                return;
+            }
+
+            // Clear existing billboards
+            for (const billboard of this.billboardRenderers) {
+                billboard.destroy(this.device);
+            }
+            this.billboardRenderers = [];
+
+            // Create billboards from JSON
+            for (const billboardData of data.billboards) {
+                const billboard = new BillboardRenderer(
+                    this.device,
+                    this.renderHelper.renderCache,
+                    billboardData.position[0],
+                    billboardData.position[1],
+                    billboardData.position[2],
+                    billboardData.size,
+                    billboardData.color[0],
+                    billboardData.color[1],
+                    billboardData.color[2],
+                    billboardData.color[3],
+                    billboardData.renderBehindWalls
+                );
+
+                billboard.dialogueText = billboardData.dialogueText || '';
+                billboard.imageName = billboardData.imageName || 'bocchi.png';
+
+                // Restore saved camera position/orientation
+                if (billboardData.savedCameraPosition) {
+                    billboard.savedCameraPosition = vec3.fromValues(
+                        billboardData.savedCameraPosition[0],
+                        billboardData.savedCameraPosition[1],
+                        billboardData.savedCameraPosition[2]
+                    );
+                }
+
+                if (billboardData.savedCameraOrientation) {
+                    const orient = billboardData.savedCameraOrientation;
+                    billboard.savedCameraOrientation = mat4.fromValues(
+                        orient[0], orient[1], orient[2], orient[3],
+                        orient[4], orient[5], orient[6], orient[7],
+                        orient[8], orient[9], orient[10], orient[11],
+                        orient[12], orient[13], orient[14], orient[15]
+                    );
+                }
+
+                // Load image if present
+                if (billboardData.imageData) {
+                    billboard.imageData = billboardData.imageData;
+                    billboard.loadImageFromDataURL(billboardData.imageData, billboard.imageName);
+                }
+
+                this.billboardRenderers.push(billboard);
+            }
+
+            console.log(`✓ Loaded ${this.billboardRenderers.length} billboards from JSON`);
+            this.selectedBillboardIndex = this.billboardRenderers.length > 0 ? 0 : -1;
+            this.autoSaveBillboards(); // Save to localStorage after importing
+        } catch (error) {
+            console.error('Failed to import billboards:', error);
+        }
     }
 }
 
