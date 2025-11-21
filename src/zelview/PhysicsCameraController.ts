@@ -127,7 +127,7 @@ export class PhysicsCameraController extends FPSCameraController {
         // Apply vertical movement
         const newY = cameraPos[1] + this.verticalVelocity * (dt / 1000);
 
-        if (newY <= minY && !this.isFlyMode) {
+        if (newY <= minY && !this.isFlyMode && !this.noclipMode) {
             // Hit ground
             cameraPos[1] = minY;
             this.verticalVelocity = 0;
@@ -139,7 +139,7 @@ export class PhysicsCameraController extends FPSCameraController {
                 this.isGrounded = false;
             }
         } else {
-            // In air
+            // In air (or noclip mode - pass through floors)
             cameraPos[1] = newY;
             this.isGrounded = false;
         }
