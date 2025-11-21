@@ -1,6 +1,16 @@
 # Noclip Memory Palace
 
-This is a fork of the beautiful noclip.website. What we're adding in this repo is the ability to use the game environments as a virtual memory palace. Navigate 3D spaces and place interactive markers to associate information with locations. All of the hard stuff was done by the original maintainers of this repo! We stand on the shoulders of giants. 
+This is a fork of the beautiful noclip.website. What we're adding in this repo is the ability to use the game environments as a virtual memory palace. Navigate 3D spaces and place interactive markers to associate information with locations. All of the hard stuff was done by the original maintainers of this repo! We stand on the shoulders of giants.
+
+## Getting Started
+
+To run the development server:
+
+```bash
+pnpm run start
+```
+
+This will build the Rust components and start the development server. The site will be available at the URL shown in the terminal (typically http://localhost:3000).
 
 ## Controls
 

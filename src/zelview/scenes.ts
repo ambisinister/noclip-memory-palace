@@ -102,13 +102,10 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             const nearestBillboard = this.findNearestBillboard();
 
             if (nearestBillboard) {
-                // Generate dialogue text for this billboard
-                const loremIpsum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.";
-                const words = loremIpsum.split(' ');
                 const billboardIndex = this.billboardRenderers.indexOf(nearestBillboard);
-                const offset = billboardIndex * 5 % words.length;
-                const dialogueWords = [...words.slice(offset), ...words.slice(0, offset)];
-                const dialogue = dialogueWords.slice(0, 40).join(' ') + '...';
+
+                // Use the billboard's custom dialogue text, or show a default message if empty
+                const dialogue = nearestBillboard.dialogueText || '(No text set for this billboard. Edit it in the Billboard Controls panel!)';
 
                 // Set text and show
                 this.dialogTextElement.textContent = dialogue;
@@ -268,6 +265,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
                 colorRInput.value = billboard.color[0].toFixed(1);
                 colorGInput.value = billboard.color[1].toFixed(1);
                 colorBInput.value = billboard.color[2].toFixed(1);
+                dialogueTextInput.value = billboard.dialogueText;
                 renderBehindCheckbox.checked = billboard.renderBehindWalls;
             } else {
                 selectedDiv.textContent = 'No billboard selected';
@@ -407,6 +405,30 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             }
         };
         colorContainer.appendChild(colorBInput);
+
+        // Dialogue text input
+        const dialogueTextLabel = document.createElement('div');
+        dialogueTextLabel.textContent = 'Dialogue Text:';
+        dialogueTextLabel.style.fontSize = '10px';
+        dialogueTextLabel.style.marginBottom = '3px';
+        dialogueTextLabel.style.marginTop = '5px';
+        controlsDiv.appendChild(dialogueTextLabel);
+
+        const dialogueTextInput = document.createElement('textarea');
+        dialogueTextInput.style.width = '100%';
+        dialogueTextInput.style.padding = '4px';
+        dialogueTextInput.style.marginBottom = '8px';
+        dialogueTextInput.style.fontFamily = 'monospace';
+        dialogueTextInput.style.fontSize = '11px';
+        dialogueTextInput.style.resize = 'vertical';
+        dialogueTextInput.rows = 3;
+        dialogueTextInput.placeholder = 'Enter text to display when pressing C...';
+        dialogueTextInput.oninput = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].dialogueText = dialogueTextInput.value;
+            }
+        };
+        controlsDiv.appendChild(dialogueTextInput);
 
         // Image file upload
         const imageFileLabel = document.createElement('div');
@@ -550,6 +572,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
     public addBillboard(device: GfxDevice, x: number, y: number, z: number, size: number = 100, r: number = 1.0, g: number = 1.0, b: number = 1.0, a: number = 1.0, renderBehindWalls: boolean = false): void {
         const billboard = new BillboardRenderer(device, this.renderHelper.renderCache, x, y, z, size, r, g, b, a, renderBehindWalls);
+        billboard.dialogueText = 'Hello! This is a new billboard. Edit this text in the Billboard Controls panel.';
         this.billboardRenderers.push(billboard);
     }
 }
