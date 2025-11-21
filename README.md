@@ -42,6 +42,28 @@ Common scene IDs:
 - `spot00_scene` - Hyrule Field
 - See `src/zelview/scenes.ts` for the full list
 
+## Memory Palace Features
+
+### Billboards
+Place interactive billboards in the 3D world to associate information with locations. Billboards are **scene-specific** - each map has its own set of billboards that persist between sessions.
+
+**Controls:**
+- **Spawn Billboard**: Use the "+ Spawn Billboard Here" button in the Billboard Controls panel
+- **Edit Text**: Select a billboard and edit its dialogue text
+- **Navigate**: Use Previous/Next buttons to cycle through and teleport to billboards
+- **Set Viewing Angle**: Position your camera and click "📷 Set Default Viewing Angle" to save your preferred view
+- **Warp Billboards**: Check "🌀 Warp Billboard" to create portals between scenes (e.g., Kokiri Forest ↔ Deku Tree)
+
+### Collision Mode
+- **Control Key**: Press `Control` (left or right) to toggle noclip mode
+  - **Noclip ON**: Pass through walls, doors, and small spaces (gravity still applies)
+  - **Noclip OFF**: Normal collision detection
+
+### Persistence
+- **Auto-Save**: All billboard changes automatically save to browser localStorage
+- **Export/Import**: Use 💾 Export JSON / 📂 Import JSON buttons to save/load billboard configurations
+- **Scene-Specific**: Each scene (Kokiri Forest, Deku Tree, etc.) has independent billboard data
+
 ## Controls
 
 Key | Description
@@ -49,6 +71,7 @@ Key | Description
 `Z` | Show/hide all UI
 `T` | Open "Games" list
 `C` | Show/hide dialog box for nearby markers
+`Control` | Toggle noclip mode (pass through walls)
 `W`/`A`/`S`/`D` or Arrow Keys | Move camera
 Hold `Shift` | Make camera move faster
 Hold `\` | Make camera move slower

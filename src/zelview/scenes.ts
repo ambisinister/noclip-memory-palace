@@ -28,6 +28,8 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     private dialogBoxElement: HTMLDivElement | null = null;
     private dialogTextElement: HTMLDivElement | null = null;
     public sceneId: string = 'spot04_scene'; // Default to Kokiri Forest
+    private lastWarpTime: number = 0; // Timestamp of last warp to prevent loops
+    private warpCooldown: number = 3000; // 3 second cooldown between warps
 
     public renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
@@ -54,6 +56,16 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
         // Auto-load billboards from localStorage
         this.autoLoadBillboards();
+
+        // Check for warp cooldown from previous scene
+        const lastWarpTimeStr = localStorage.getItem('lastWarpTime');
+        if (lastWarpTimeStr) {
+            this.lastWarpTime = parseInt(lastWarpTimeStr);
+            const timeSinceWarp = Date.now() - this.lastWarpTime;
+            if (timeSinceWarp < this.warpCooldown) {
+                console.log(`🛡️ Warp cooldown active: ${((this.warpCooldown - timeSinceWarp) / 1000).toFixed(1)}s remaining`);
+            }
+        }
     }
 
     private createDialogBoxUI(): void {
@@ -155,6 +167,50 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         }
 
         return nearestBillboard;
+    }
+
+    private checkWarpBillboardCollisions(): void {
+        if (!this.currentCamera) return;
+
+        // Check cooldown to prevent infinite warp loops
+        const currentTime = Date.now();
+        if (currentTime - this.lastWarpTime < this.warpCooldown) {
+            return; // Still in cooldown period
+        }
+
+        // Get camera position from view matrix
+        const viewMatrix = this.currentCamera.camera.viewMatrix;
+        const camX = -(viewMatrix[0] * viewMatrix[12] + viewMatrix[1] * viewMatrix[13] + viewMatrix[2] * viewMatrix[14]);
+        const camY = -(viewMatrix[4] * viewMatrix[12] + viewMatrix[5] * viewMatrix[13] + viewMatrix[6] * viewMatrix[14]);
+        const camZ = -(viewMatrix[8] * viewMatrix[12] + viewMatrix[9] * viewMatrix[13] + viewMatrix[10] * viewMatrix[14]);
+
+        // Check each warp billboard for collision
+        for (const billboard of this.billboardRenderers) {
+            if (!billboard.isWarpBillboard || !billboard.targetScene) continue;
+
+            const dx = billboard.position[0] - camX;
+            const dy = billboard.position[1] - camY;
+            const dz = billboard.position[2] - camZ;
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            // Check if within warp radius
+            if (distance < billboard.warpRadius) {
+                this.triggerSceneWarp(billboard.targetScene);
+                break; // Only warp to one scene at a time
+            }
+        }
+    }
+
+    private triggerSceneWarp(targetSceneId: string): void {
+        // Set cooldown timestamp in localStorage to persist across page reloads
+        const warpTimestamp = Date.now();
+        localStorage.setItem('lastWarpTime', warpTimestamp.toString());
+
+        console.log(`🌀 Warping to scene: ${targetSceneId} (3s cooldown activated)`);
+
+        // Reload the page with the new scene hash
+        window.location.hash = `zelview/${targetSceneId}`;
+        window.location.reload();
     }
 
     private teleportToBillboard(billboardIndex: number): void {
@@ -462,6 +518,9 @@ class ZelviewRenderer implements Viewer.SceneGfx {
                 colorBInput.value = billboard.color[2].toFixed(1);
                 dialogueTextInput.value = billboard.dialogueText;
                 renderBehindCheckbox.checked = billboard.renderBehindWalls;
+                warpBillboardCheckbox.checked = billboard.isWarpBillboard;
+                warpTargetInput.value = billboard.targetScene;
+                warpTargetContainer.style.display = billboard.isWarpBillboard ? 'block' : 'none';
             } else {
                 selectedDiv.textContent = 'No billboard selected';
                 controlsDiv.style.display = 'none';
@@ -682,6 +741,59 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         renderBehindText.textContent = 'Painting mode (only visible behind walls)';
         renderBehindLabel.appendChild(renderBehindText);
 
+        // Warp Billboard checkbox
+        const warpBillboardLabel = document.createElement('label');
+        warpBillboardLabel.style.fontSize = '10px';
+        warpBillboardLabel.style.display = 'flex';
+        warpBillboardLabel.style.alignItems = 'center';
+        warpBillboardLabel.style.marginBottom = '8px';
+        warpBillboardLabel.style.cursor = 'pointer';
+        controlsDiv.appendChild(warpBillboardLabel);
+
+        const warpBillboardCheckbox = document.createElement('input');
+        warpBillboardCheckbox.type = 'checkbox';
+        warpBillboardCheckbox.checked = false;
+        warpBillboardCheckbox.style.marginRight = '5px';
+        warpBillboardCheckbox.onchange = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].isWarpBillboard = warpBillboardCheckbox.checked;
+                warpTargetContainer.style.display = warpBillboardCheckbox.checked ? 'block' : 'none';
+                this.autoSaveBillboards();
+            }
+        };
+        warpBillboardLabel.appendChild(warpBillboardCheckbox);
+
+        const warpBillboardText = document.createElement('span');
+        warpBillboardText.textContent = '🌀 Warp Billboard (teleport to another scene)';
+        warpBillboardLabel.appendChild(warpBillboardText);
+
+        // Warp target scene input (hidden by default)
+        const warpTargetContainer = document.createElement('div');
+        warpTargetContainer.style.display = 'none';
+        warpTargetContainer.style.marginBottom = '8px';
+        controlsDiv.appendChild(warpTargetContainer);
+
+        const warpTargetLabel = document.createElement('div');
+        warpTargetLabel.textContent = 'Target Scene ID:';
+        warpTargetLabel.style.fontSize = '10px';
+        warpTargetLabel.style.marginBottom = '3px';
+        warpTargetContainer.appendChild(warpTargetLabel);
+
+        const warpTargetInput = document.createElement('input');
+        warpTargetInput.type = 'text';
+        warpTargetInput.placeholder = 'e.g., ydan_scene or spot04_scene';
+        warpTargetInput.style.width = '100%';
+        warpTargetInput.style.padding = '4px';
+        warpTargetInput.style.fontFamily = 'monospace';
+        warpTargetInput.style.fontSize = '11px';
+        warpTargetInput.oninput = () => {
+            if (this.selectedBillboardIndex >= 0) {
+                this.billboardRenderers[this.selectedBillboardIndex].targetScene = warpTargetInput.value;
+                this.autoSaveBillboards();
+            }
+        };
+        warpTargetContainer.appendChild(warpTargetInput);
+
         // Set Default Viewing Angle button
         const setViewAngleButton = document.createElement('button');
         setViewAngleButton.textContent = '📷 Set Default Viewing Angle';
@@ -754,6 +866,9 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         // Store camera reference for UI
         this.currentCamera = viewerInput;
+
+        // Check for warp billboard collisions
+        this.checkWarpBillboardCollisions();
 
         this.renderHelper.pushTemplateRenderInst();
 
@@ -871,6 +986,9 @@ class ZelviewRenderer implements Viewer.SceneGfx {
                 billboard.savedCameraPosition[2]
             ] : null,
             savedCameraOrientation: billboard.savedCameraOrientation ? Array.from(billboard.savedCameraOrientation) : null,
+            isWarpBillboard: billboard.isWarpBillboard,
+            targetScene: billboard.targetScene,
+            warpRadius: billboard.warpRadius,
         }));
 
         return JSON.stringify({
@@ -913,6 +1031,11 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
                 billboard.dialogueText = billboardData.dialogueText || '';
                 billboard.imageName = billboardData.imageName || 'bocchi.png';
+
+                // Restore warp billboard properties
+                billboard.isWarpBillboard = billboardData.isWarpBillboard || false;
+                billboard.targetScene = billboardData.targetScene || '';
+                billboard.warpRadius = billboardData.warpRadius || 150;
 
                 // Restore saved camera position/orientation
                 if (billboardData.savedCameraPosition) {
