@@ -15,6 +15,7 @@ import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { BillboardRenderer } from './BillboardRenderer.js';
 import { PhysicsCameraController } from './PhysicsCameraController.js';
 import { mat4, vec3 } from 'gl-matrix';
+import OpenAI from 'openai';
 
 const pathBase = `ZeldaOcarinaOfTime`;
 
@@ -716,6 +717,113 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         };
         controlsDiv.appendChild(imageFileInput);
 
+        // Image Generation section
+        const aiImageLabel = document.createElement('div');
+        aiImageLabel.textContent = 'Or Generate:';
+        aiImageLabel.style.fontSize = '10px';
+        aiImageLabel.style.marginTop = '10px';
+        aiImageLabel.style.marginBottom = '3px';
+        aiImageLabel.style.fontWeight = 'bold';
+        controlsDiv.appendChild(aiImageLabel);
+
+        // Model dropdown
+        const modelLabel = document.createElement('div');
+        modelLabel.textContent = 'Model:';
+        modelLabel.style.fontSize = '10px';
+        modelLabel.style.marginBottom = '3px';
+        controlsDiv.appendChild(modelLabel);
+
+        const modelSelect = document.createElement('select');
+        modelSelect.style.width = '100%';
+        modelSelect.style.padding = '4px';
+        modelSelect.style.marginBottom = '8px';
+        modelSelect.style.fontFamily = 'monospace';
+        modelSelect.style.fontSize = '11px';
+
+        const models = [
+            { id: 'google/gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image' },
+            { id: 'google/gemini-2.5-flash-image', name: 'Gemini 2.5 Flash Image' },
+        ];
+
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.name;
+            modelSelect.appendChild(option);
+        });
+        controlsDiv.appendChild(modelSelect);
+
+        // Prompt input
+        const promptLabel = document.createElement('div');
+        promptLabel.textContent = 'Prompt:';
+        promptLabel.style.fontSize = '10px';
+        promptLabel.style.marginBottom = '3px';
+        controlsDiv.appendChild(promptLabel);
+
+        const promptInput = document.createElement('textarea');
+        promptInput.style.width = '100%';
+        promptInput.style.padding = '4px';
+        promptInput.style.marginBottom = '8px';
+        promptInput.style.fontFamily = 'monospace';
+        promptInput.style.fontSize = '11px';
+        promptInput.style.resize = 'vertical';
+        promptInput.rows = 3;
+        promptInput.placeholder = 'e.g., A beautiful sunset over mountains';
+        controlsDiv.appendChild(promptInput);
+
+        // Generate button
+        const generateButton = document.createElement('button');
+        generateButton.textContent = '✨ Generate Image';
+        generateButton.style.width = '100%';
+        generateButton.style.padding = '10px';
+        generateButton.style.marginBottom = '10px';
+        generateButton.style.cursor = 'pointer';
+        generateButton.style.backgroundColor = '#9b59b6';
+        generateButton.style.border = 'none';
+        generateButton.style.color = 'white';
+        generateButton.style.fontWeight = 'bold';
+        generateButton.onclick = async () => {
+            if (this.selectedBillboardIndex < 0) {
+                console.warn('No billboard selected');
+                return;
+            }
+
+            const prompt = promptInput.value.trim();
+            if (!prompt) {
+                console.warn('Please enter a prompt');
+                return;
+            }
+
+            const model = modelSelect.value;
+
+            // Disable button and show loading state
+            generateButton.disabled = true;
+            generateButton.textContent = '⏳ Generating...';
+            generateButton.style.backgroundColor = '#666';
+
+            try {
+                console.log(`🎨 Generating image with ${model}...`);
+                const imageUrl = await this.generateImage(prompt, model);
+
+                if (imageUrl && this.selectedBillboardIndex >= 0) {
+                    const billboard = this.billboardRenderers[this.selectedBillboardIndex];
+                    billboard.imageData = imageUrl;
+                    billboard.loadImageFromDataURL(imageUrl, 'ai-generated.png');
+                    this.autoSaveBillboards();
+                    console.log('✓ Image generated and applied to billboard!');
+                }
+            } catch (error) {
+                console.error('Failed to generate image:', error);
+                alert('Failed to generate image. Check console for details.');
+            } finally {
+                // Re-enable button
+                generateButton.disabled = false;
+                generateButton.textContent = '✨ Generate Image';
+                generateButton.style.backgroundColor = '#9b59b6';
+            }
+        };
+        controlsDiv.appendChild(generateButton);
+
         // Render Behind Walls checkbox
         const renderBehindLabel = document.createElement('label');
         renderBehindLabel.style.fontSize = '10px';
@@ -1012,6 +1120,46 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             document.body.removeChild(this.dialogBoxElement);
             this.dialogBoxElement = null;
             this.dialogTextElement = null;
+        }
+    }
+
+    private async generateImage(prompt: string, model: string): Promise<string | null> {
+        const apiKey = __OPENROUTER_API_KEY;
+
+        if (!apiKey) {
+            throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY environment variable.');
+        }
+
+        const client = new OpenAI({
+            baseURL: 'https://openrouter.ai/api/v1',
+            apiKey: apiKey,
+            dangerouslyAllowBrowser: true, // Required for browser usage
+        });
+
+        try {
+            const apiResponse = await client.chat.completions.create({
+                model: model,
+                messages: [
+                    {
+                        role: 'user' as const,
+                        content: prompt,
+                    },
+                ],
+                modalities: ['image', 'text'] as any,
+            });
+
+            const response = apiResponse.choices[0].message;
+            if ((response as any).images && (response as any).images.length > 0) {
+                const imageUrl = (response as any).images[0].image_url.url;
+                console.log(`✓ Image generated successfully (${imageUrl.substring(0, 50)}...)`);
+                return imageUrl;
+            } else {
+                console.warn('No images returned from API');
+                return null;
+            }
+        } catch (error) {
+            console.error('OpenRouter API error:', error);
+            throw error;
         }
     }
 

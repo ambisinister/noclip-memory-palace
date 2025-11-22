@@ -26,6 +26,7 @@
     "crc-32": "^1.2.2",
     "gl-matrix": "^3.4.3",
     "librw": "^0.4.0",
+    "openai": "^6.9.1",
     "reflect-metadata": "^0.2.2",
     "tiff": "^6.2.0"
   },

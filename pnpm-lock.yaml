@@ -17,6 +17,9 @@ importers:
       librw:
         specifier: ^0.4.0
         version: 0.4.0
+      openai:
+        specifier: ^6.9.1
+        version: 6.9.1
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -665,6 +668,18 @@ packages:
   onchange@7.1.0:
     resolution: {integrity: sha512-ZJcqsPiWUAUpvmnJri5TPBooqJOPmC0ttN65juhN15Q8xA+Nbg3BaxBHXQ45EistKKlKElb0edmbPWnKSBkvMg==}
     hasBin: true
+
+  openai@6.9.1:
+    resolution: {integrity: sha512-vQ5Rlt0ZgB3/BNmTa7bIijYFhz3YBceAA3Z4JuoMSBftBF9YqFHIEhZakSs+O/Ad7EaoEimZvHxD5ylRjN11Lg==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
 
   pako@2.1.0:
     resolution: {integrity: sha512-w+eufiZ1WuJYgPXbV/PO3NCMEc3xqylkKHzp8bxp1uW4qaSNQUkwmLLEc3kKsfz8lpV1F8Ht3U1Cm+9Srog2ug==}
@@ -1334,6 +1349,8 @@ snapshots:
       cross-spawn: 7.0.6
       ignore: 5.3.2
       tree-kill: 1.2.2
+
+  openai@6.9.1: {}
 
   pako@2.1.0: {}
 

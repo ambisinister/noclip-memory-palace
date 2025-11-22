@@ -26,6 +26,7 @@ export default defineConfig({
     },
     define: {
       __COMMIT_HASH: JSON.stringify(gitCommit),
+      __OPENROUTER_API_KEY: JSON.stringify(process.env.OPENROUTER_API_KEY || ''),
     },
   },
   html: {
