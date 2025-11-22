@@ -519,7 +519,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
                 dialogueTextInput.value = billboard.dialogueText;
                 renderBehindCheckbox.checked = billboard.renderBehindWalls;
                 warpBillboardCheckbox.checked = billboard.isWarpBillboard;
-                warpTargetInput.value = billboard.targetScene;
+                warpTargetInput.value = billboard.targetScene || '';
                 warpTargetContainer.style.display = billboard.isWarpBillboard ? 'block' : 'none';
             } else {
                 selectedDiv.textContent = 'No billboard selected';
@@ -774,19 +774,108 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         controlsDiv.appendChild(warpTargetContainer);
 
         const warpTargetLabel = document.createElement('div');
-        warpTargetLabel.textContent = 'Target Scene ID:';
+        warpTargetLabel.textContent = 'Warp to Scene:';
         warpTargetLabel.style.fontSize = '10px';
         warpTargetLabel.style.marginBottom = '3px';
         warpTargetContainer.appendChild(warpTargetLabel);
 
-        const warpTargetInput = document.createElement('input');
-        warpTargetInput.type = 'text';
-        warpTargetInput.placeholder = 'e.g., ydan_scene or spot04_scene';
+        const warpTargetInput = document.createElement('select');
         warpTargetInput.style.width = '100%';
         warpTargetInput.style.padding = '4px';
         warpTargetInput.style.fontFamily = 'monospace';
         warpTargetInput.style.fontSize = '11px';
-        warpTargetInput.oninput = () => {
+
+        // Populate dropdown with all available scenes
+        const sceneOptions = [
+            { id: '', name: '-- Select a scene --' },
+            { id: 'spot04_scene', name: 'Kokiri Forest' },
+            { id: 'ydan_scene', name: 'Inside the Deku Tree' },
+            { id: 'ydan_boss_scene', name: 'Inside the Deku Tree (Boss)' },
+            { id: 'spot10_scene', name: 'Lost Woods' },
+            { id: 'spot05_scene', name: 'Sacred Forest Meadow' },
+            { id: 'Bmori1_scene', name: 'Forest Temple' },
+            { id: 'moribossroom_scene', name: 'Forest Temple (Boss)' },
+            { id: 'spot01_scene', name: 'Kakariko Village' },
+            { id: 'kinsuta_scene', name: 'Skulltula House' },
+            { id: 'mahouya_scene', name: "Granny's Potion Shop" },
+            { id: 'spot02_scene', name: 'Kakariko Graveyard' },
+            { id: 'hakasitarelay_scene', name: "Dampé's Grave & Kakariko Windmill" },
+            { id: 'hakaana_ouke_scene', name: "Royal Family's Tomb" },
+            { id: 'HAKAdan_scene', name: 'Shadow Temple' },
+            { id: 'HAKAdan_bs_scene', name: 'Shadow Temple (Boss)' },
+            { id: 'HAKAdanCH_scene', name: 'Bottom of the Well' },
+            { id: 'hakaana_scene', name: 'Heart Piece Grave' },
+            { id: 'hakaana2_scene', name: 'Fairy Fountain Grave' },
+            { id: 'syatekijyou_scene', name: 'Shooting Gallery' },
+            { id: 'spot16_scene', name: 'Death Mountain' },
+            { id: 'spot17_scene', name: 'Death Mountain Crater' },
+            { id: 'spot18_scene', name: 'Goron City' },
+            { id: 'ddan_scene', name: "Dodongo's Cavern" },
+            { id: 'ddan_boss_scene', name: "Dodongo's Cavern (Boss)" },
+            { id: 'HIDAN_scene', name: 'Fire Temple' },
+            { id: 'FIRE_bs_scene', name: 'Fire Temple (Boss)' },
+            { id: 'spot00_scene', name: 'Hyrule Field' },
+            { id: 'spot20_scene', name: 'Lon Lon Ranch' },
+            { id: 'spot03_scene', name: "Zora's River" },
+            { id: 'daiyousei_izumi_scene', name: 'Great Fairy Fountain' },
+            { id: 'yousei_izumi_tate_scene', name: 'Small Fairy Fountain' },
+            { id: 'yousei_izumi_yoko_scene', name: 'Magic Fairy Fountain' },
+            { id: 'kakusiana_scene', name: 'Grottos' },
+            { id: 'hiral_demo_scene', name: 'Cutscene Map' },
+            { id: 'spot15_scene', name: 'Hyrule Castle' },
+            { id: 'hairal_niwa_scene', name: 'Castle Courtyard' },
+            { id: 'hairal_niwa_n_scene', name: 'Castle Courtyard (Night)' },
+            { id: 'nakaniwa_scene', name: "Zelda's Courtyard" },
+            { id: 'miharigoya_scene', name: "Lots'o'Pots" },
+            { id: 'bowling_scene', name: 'Bombchu Bowling Alley' },
+            { id: 'takaraya_scene', name: 'Treasure Chest Game' },
+            { id: 'tokinoma_scene', name: 'Temple of Time (Interior)' },
+            { id: 'kenjyanoma_scene', name: 'Chamber of Sages' },
+            { id: 'spot06_scene', name: 'Lake Hylia' },
+            { id: 'hylia_labo_scene', name: 'Hylia Lakeside Laboratory' },
+            { id: 'turibori_scene', name: 'Fishing Pond' },
+            { id: 'MIZUsin_scene', name: 'Water Temple' },
+            { id: 'MIZUsin_bs_scene', name: 'Water Temple (Boss)' },
+            { id: 'spot07_scene', name: "Zora's Domain" },
+            { id: 'spot08_scene', name: "Zora's Fountain" },
+            { id: 'bdan_scene', name: "Jabu-Jabu's Belly" },
+            { id: 'bdan_boss_scene', name: "Jabu-Jabu's Belly (Boss)" },
+            { id: 'ice_doukutu_scene', name: 'Ice Cavern' },
+            { id: 'spot09_scene', name: 'Gerudo Valley' },
+            { id: 'spot12_scene', name: "Gerudo's Fortress" },
+            { id: 'men_scene', name: 'Gerudo Training Grounds' },
+            { id: 'gerudoway_scene', name: "Thieves' Hideout" },
+            { id: 'spot13_scene', name: 'Haunted Wasteland' },
+            { id: 'spot11_scene', name: 'Desert Colossus' },
+            { id: 'jyasinzou_scene', name: 'Spirit Temple' },
+            { id: 'jyasinboss_scene', name: 'Spirit Temple (Mid-Boss)' },
+            { id: 'ganontika_scene', name: "Ganon's Castle" },
+            { id: 'ganontikasonogo_scene', name: "Ganon's Castle (Crumbling)" },
+            { id: 'ganon_tou_scene', name: "Ganon's Castle (Outside)" },
+            { id: 'ganon_scene', name: "Ganon's Castle Tower" },
+            { id: 'ganon_sonogo_scene', name: "Ganon's Castle Tower (Crumbling)" },
+            { id: 'ganon_boss_scene', name: 'Second-To-Last Boss Ganondorf' },
+            { id: 'ganon_demo_scene', name: 'Final Battle Against Ganon' },
+            { id: 'ganon_final_scene', name: "Ganondorf's Death" },
+            { id: 'test01_scene', name: 'Collision Testing Area' },
+            { id: 'besitu_scene', name: 'Besitu / Treasure Chest Warp' },
+            { id: 'depth_test_scene', name: 'Depth Test' },
+            { id: 'syotes_scene', name: 'Stalfos Middle Room' },
+            { id: 'syotes2_scene', name: 'Stalfos Boss Room' },
+            { id: 'sutaru_scene', name: 'Dark Link Testing Area' },
+            { id: 'hairal_niwa2_scene', name: 'Beta Castle Courtyard' },
+            { id: 'sasatest_scene', name: 'Action Testing Room' },
+            { id: 'testroom_scene', name: 'Item Testing Room' },
+        ];
+
+        sceneOptions.forEach(option => {
+            const optionElement = document.createElement('option');
+            optionElement.value = option.id;
+            optionElement.textContent = option.name;
+            warpTargetInput.appendChild(optionElement);
+        });
+
+        warpTargetInput.onchange = () => {
             if (this.selectedBillboardIndex >= 0) {
                 this.billboardRenderers[this.selectedBillboardIndex].targetScene = warpTargetInput.value;
                 this.autoSaveBillboards();
