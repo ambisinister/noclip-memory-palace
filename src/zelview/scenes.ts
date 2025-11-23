@@ -803,12 +803,20 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
             try {
                 console.log(`🎨 Generating image with ${model}...`);
-                const imageUrl = await this.generateImage(prompt, model);
+                const imagePath = await this.generateImage(prompt, model);
 
-                if (imageUrl && this.selectedBillboardIndex >= 0) {
+                if (imagePath && this.selectedBillboardIndex >= 0) {
                     const billboard = this.billboardRenderers[this.selectedBillboardIndex];
-                    billboard.imageData = imageUrl;
-                    billboard.loadImageFromDataURL(imageUrl, 'ai-generated.png');
+
+                    // Extract filename from path for display
+                    const filename = imagePath.split('/').pop() || 'ai-generated.png';
+
+                    // Store the path (not data URL) for persistence
+                    billboard.imageData = imagePath;
+                    billboard.imageName = filename;
+
+                    // Load image from path (loadImageFromDataURL works with regular URLs too)
+                    billboard.loadImageFromDataURL(imagePath, filename);
                     this.autoSaveBillboards();
                     console.log('✓ Image generated and applied to billboard!');
                 }
@@ -1137,6 +1145,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         });
 
         try {
+            // Generate image with OpenRouter
             const apiResponse = await client.chat.completions.create({
                 model: model,
                 messages: [
@@ -1150,9 +1159,30 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
             const response = apiResponse.choices[0].message;
             if ((response as any).images && (response as any).images.length > 0) {
-                const imageUrl = (response as any).images[0].image_url.url;
-                console.log(`✓ Image generated successfully (${imageUrl.substring(0, 50)}...)`);
-                return imageUrl;
+                const imageDataUrl = (response as any).images[0].image_url.url;
+                console.log(`✓ Image generated successfully`);
+
+                // Save image to disk via backend endpoint
+                try {
+                    const saveResponse = await fetch('/api/save-image', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ imageData: imageDataUrl }),
+                    });
+
+                    if (!saveResponse.ok) {
+                        throw new Error('Failed to save image to disk');
+                    }
+
+                    const { path } = await saveResponse.json();
+                    console.log(`✓ Image saved to: ${path}`);
+                    return path; // Return the file path instead of data URL
+                } catch (saveError) {
+                    console.error('Failed to save image, using data URL fallback:', saveError);
+                    return imageDataUrl; // Fallback to data URL if save fails
+                }
             } else {
                 console.warn('No images returned from API');
                 return null;

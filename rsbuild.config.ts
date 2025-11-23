@@ -1,10 +1,12 @@
 import { defineConfig, type RequestHandler } from '@rsbuild/core';
 import { pluginTypeCheck } from '@rsbuild/plugin-type-check';
 import { execSync } from 'node:child_process';
-import { readdir } from 'node:fs';
+import { readdir, writeFile } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import type { ServerResponse } from 'node:http';
 import parseUrl from 'parseurl';
 import send from 'send';
+import { join } from 'node:path';
 
 let gitCommit = '(unknown)';
 try {
@@ -67,12 +69,70 @@ export default defineConfig({
   dev: {
     setupMiddlewares: [
       (middlewares, _server) => {
+        middlewares.unshift(saveGeneratedImage);
         middlewares.unshift(serveData);
         return middlewares;
       },
     ],
   },
 });
+
+// Handle POST requests to save generated images
+const saveGeneratedImage: RequestHandler = async (req, res, next) => {
+  if (req.method !== 'POST' || req.url !== '/api/save-image') {
+    next();
+    return;
+  }
+
+  let body = '';
+  req.on('data', (chunk) => {
+    body += chunk.toString();
+  });
+
+  req.on('end', async () => {
+    try {
+      const { imageData } = JSON.parse(body);
+
+      if (!imageData || !imageData.startsWith('data:image/')) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid image data' }));
+        return;
+      }
+
+      // Extract base64 data
+      const base64Data = imageData.split(',')[1];
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      // Create unique filename with timestamp
+      const timestamp = Date.now();
+      const filename = `generated-${timestamp}.png`;
+      const filepath = join('data', 'generations', filename);
+
+      // Ensure directory exists
+      await mkdir(join('data', 'generations'), { recursive: true });
+
+      // Save file
+      writeFile(filepath, buffer, (err) => {
+        if (err) {
+          console.error('Error saving image:', err);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Failed to save image' }));
+          return;
+        }
+
+        // Return the path that can be used to load the image
+        const imagePath = `/data/generations/${filename}`;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ path: imagePath }));
+        console.log(`✓ Saved generated image: ${imagePath}`);
+      });
+    } catch (error) {
+      console.error('Error processing save request:', error);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to process request' }));
+    }
+  });
+};
 
 // Serve files from the `data` directory.
 const serveData: RequestHandler = (req, res, next) => {
