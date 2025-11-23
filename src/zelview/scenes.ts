@@ -1043,9 +1043,20 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         deleteButton.style.color = 'white';
         deleteButton.onclick = () => {
             if (this.selectedBillboardIndex >= 0) {
-                this.billboardRenderers[this.selectedBillboardIndex].destroy(this.device);
-                this.billboardRenderers.splice(this.selectedBillboardIndex, 1);
-                this.selectedBillboardIndex = -1;
+                const deletedIndex = this.selectedBillboardIndex;
+                this.billboardRenderers[deletedIndex].destroy(this.device);
+                this.billboardRenderers.splice(deletedIndex, 1);
+
+                // Select a valid billboard after deletion
+                if (this.billboardRenderers.length > 0) {
+                    // If we deleted the last billboard, select the new last one
+                    // Otherwise, keep the same index (which now points to the next billboard)
+                    this.selectedBillboardIndex = Math.min(deletedIndex, this.billboardRenderers.length - 1);
+                } else {
+                    // No billboards left
+                    this.selectedBillboardIndex = -1;
+                }
+
                 console.log('Billboard deleted');
                 this.autoSaveBillboards();
                 updateControls();
